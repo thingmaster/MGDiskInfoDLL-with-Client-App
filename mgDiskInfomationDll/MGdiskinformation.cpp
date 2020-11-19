@@ -201,7 +201,118 @@ unsigned MGdiskpart(TCHAR * tmpfileptr)
 }
 
 
+int testfunc(void)
+{
+    HANDLE fhnd = 0, drivehandle = 0;
+    BYTE wbytedata[4096] , rbytedata[4096] ;
+    DWORD writecount = 0, readsize = 0;
+    int offs = 0;
+    BOOL readstat = W32_Read(fhnd, (LPCWSTR)"\\\\1", rbytedata, readsize, offs);
+    BOOL writestat = W32_Write(fhnd, (LPCWSTR)"\\\\1", wbytedata, writecount, offs);
+    BOOL lockstat = W32_lock_volume( drivehandle);
+    BOOL dismountstat = W32_dismount_volume((LPCWSTR) "F");
+    return 0;
+}
+
+BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs)
+{
+    if (fhnd==0)
+    {
+        fhnd = CreateFile(physpath, // win32file.CreateFile(physpath,
+            GENERIC_READ,  //win32file.GENERIC_READ, #access
+            FILE_SHARE_READ,    //win32file.FILE_SHARE_READ, #share mode
+            0, //# attributes
+            OPEN_EXISTING, //win32file.OPEN_EXISTING, #create disposition
+            FILE_ATTRIBUTE_NORMAL, // #flags and attributes FILE_ATTRIBUTE_NORMAL 128 (0x80)
+            0);
+        if (fhnd == 0)
+        {
+            return FALSE; //, -1, 0 # couldnot open it
+        }
+    }
+
+    LONG movedisthigh = 0;
+    SetFilePointer(fhnd, offs, &movedisthigh, FILE_BEGIN); //win32file.SetFilePointer(fhnd, offs, win32file.FILE_BEGIN)
+    //werr, rbytebuf = win32file.ReadFile(fhnd, readsize, None) #rbytebuf, None) #, overlapped )
+    DWORD readcountresult;
+    BOOL readstat = FALSE;
+    readstat = ReadFile(fhnd, rbytebuf, readsize, &readcountresult, 0); //#, overlapped )
+
+    return readstat ; // fhnd, werr, rbytebuf
+}
+// W32_Write(fhnd, physpath, rbytebuf, readsize, offs) - execute the win32file Win32 API Write function, optionally open a handle
+BOOL  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs)
+{
+    //if fhnd is Null, open the deviceand return handle
+    //physpath is a fully constructed Win32 compliant \\physicaldevice0 path for writing
+    //wbytedata is a win32 compliant write buffer, size is implied in the buffer size
+    //offs is a file byte offset from start of file ONLY USED IF FHND IS NONE!
+    //returns handle, errorstatus, bytescount
+    //def W32_Write(fhnd, physpath, wbytedata, offs) :
+    if (!fhnd )
+    {
+        fhnd = CreateFile(physpath,  //fhnd = win32file.CreateFile(physpath,
+            GENERIC_READ | GENERIC_WRITE, //win32file.GENERIC_READ | win32file.GENERIC_WRITE, #access
+            FILE_SHARE_READ | FILE_SHARE_WRITE, //win32file.FILE_SHARE_READ | win32file.FILE_SHARE_WRITE, #share mode
+            0, //# attributes
+            OPEN_EXISTING, //win32file.OPEN_EXISTING, #create disposition
+            FILE_ATTRIBUTE_NORMAL, //  0x80, #FILE_FLAG_BACKUP_SEMANTICS 2 normal 0x80, #flags and attributes FILE_ATTRIBUTE_NORMAL 128 (0x80)
+            0);
+        if (! fhnd)
+        {
+            return FALSE ; //0, -1, 0 # couldnot open it
+        }
+    }
+    //werr, nbytes = win32file.WriteFile(fhnd, wbytedata)
+    DWORD writecountresult;
+    BOOL werr = WriteFile(fhnd, wbytedata, writecount, &writecountresult, 0 );
+    //#win32file.CloseHandle(fhnd) #win32file.FlushFileBuffers(fhnd)
+    //#fhnd = 0
+    return FALSE ;  //  fhnd, werr, nbytes
+}
+
+
+BOOL W32_lock_volume(HANDLE drivehandle)
+{
+    if (drivehandle != 0)
+    {
+        DWORD  ioctl = FSCTL_LOCK_VOLUME; // winioctl['FSCTL_LOCK_VOLUME']
+        BOOL info = DeviceIoControl(drivehandle, ioctl, 0, 0, 0, 0, 0, 0); //#, None) #24)//info = win32file.DeviceIoControl(drivehandle, ioctl, None, None, None)#, None) #24)
+        if (!info)
+        {
+            return FALSE;
+        }
+        return TRUE;
+    }
+    //print('lock_physical_drive(), LOCK IOCTL **FAILED** Check for open files on device??')
+    return FALSE;
+}
+
+BOOL W32_dismount_volume(LPCWSTR targetvolpath)
+{
+    HANDLE fhnd = 0;
+    fhnd = CreateFileW(targetvolpath,  // fhnd = win32file.CreateFile(targetdev,
+        GENERIC_READ | GENERIC_WRITE, // #access
+        FILE_SHARE_READ | FILE_SHARE_WRITE, //#share mode
+        0, //# sec attributes
+        OPEN_EXISTING, //#create disposition
+        FILE_ATTRIBUTE_NORMAL, //#flags and attributes FILE_ATTRIBUTE_NORMAL 128 (0x80)
+        0);
+    if (!fhnd)
+    {
+        return FALSE;
+    }
+    //print('Unexpected CreateFile error in unmount_volumes(%s)' % targetdev)
+
+    DWORD ioctl = FSCTL_DISMOUNT_VOLUME; //0x00090020;// winioctl['FSCTL_DISMOUNT_VOLUME']
+    BOOL info = DeviceIoControl(fhnd, ioctl, 0, 0, 0, 0, 0, 0);
+    // add Handle to the Instance LIST OF HANDLES BEING DISMOUNTED ## fhandle.append(fhnd)
+
+    return info;
+}
+
+
+
 /*
 TCHAR* tmpfilewrite(int argc, const char* argv[], char * fnbuffer )
 */
-
