@@ -40,7 +40,7 @@ extern "C" MGSTORAGEDLL_API unsigned MGSMARTscan();
 //scan SMART information TEST VERSION.
 extern "C" MGSTORAGEDLL_API unsigned MGdiskpart(TCHAR * tmpfileptr);
 
-extern "C" MGSTORAGEDLL_API BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs);
+extern "C" MGSTORAGEDLL_API HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs);
 extern "C" MGSTORAGEDLL_API BOOL W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs);
 extern "C" MGSTORAGEDLL_API BOOL W32_lock_volume(HANDLE drivehandle);
 extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );

@@ -51,12 +51,12 @@ int main()
 
     int dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive0");
     dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    int dlresult = disklayout((LPWSTR) L"\\\\.\\PhysicalDrive0");
+    int dlresult = disklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
     dlresult = disklayout((LPWSTR)L"\\\\.\\PhysicalDrive1");
 
 
     int gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\C:"); // \\\\.\\PhysicalDrive0");
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\D:") ; // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\D:"); // 
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\E:"); // 
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\F:"); // 
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\G:"); // 
@@ -65,9 +65,32 @@ int main()
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\J:"); // 
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\K:"); // 
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\L:"); // 
+
+    BYTE rbytebuf[2048];
+    HANDLE fhnd = W32_Read((HANDLE)0, (LPWSTR)L"\\\\.\\\\F:", rbytebuf, 2048, 0);
+    BOOL lockstat = W32_lock_volume(fhnd);
+    if (lockstat)
+    {
+        printf("LOCKED");
+        for (int i = 16384; i < 400000000; i += 1000000)
+        {
+            printf("i=%d: %2x %2x %2x\n", i, rbytebuf[0], rbytebuf[1], rbytebuf[2]);
+            fhnd = W32_Read(fhnd, (LPWSTR)L"\\\\.\\\\F:", rbytebuf, 2048, i);
+            if (!fhnd) 
+            {
+                break;
+            }
+        }
+    }
+    CloseHandle(fhnd);
+
+    W32_dismount_volume((LPWSTR)L"\\\\.\\\\F:");
+
+
     char mychars[128], newchars[128];
     memcpy(mychars, "abcdefg\0", 8);
 
+    return 0;
 
 #ifndef DOSMARTMG
     myinfo.MGSMARTscan(0);

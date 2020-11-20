@@ -210,14 +210,14 @@ int testfunc(void)
     BYTE wbytedata[4096] , rbytedata[4096] ;
     DWORD writecount = 0, readsize = 0;
     int offs = 0;
-    BOOL readstat = W32_Read(fhnd, (LPCWSTR)"\\\\1", rbytedata, readsize, offs);
+    HANDLE readstat = W32_Read(fhnd, (LPCWSTR)"\\\\1", rbytedata, readsize, offs);
     //BOOL writestat = W32_Write(fhnd, (LPCWSTR)"\\\\1", wbytedata, writecount, offs);
     BOOL lockstat = W32_lock_volume( drivehandle);
     BOOL dismountstat = W32_dismount_volume((LPCWSTR) "F");
     return 0;
 }
 
-BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs)
+HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs)
 {
     if (fhnd==0)
     {
@@ -228,9 +228,9 @@ BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LO
             OPEN_EXISTING, //win32file.OPEN_EXISTING, #create disposition
             FILE_ATTRIBUTE_NORMAL, // #flags and attributes FILE_ATTRIBUTE_NORMAL 128 (0x80)
             0);
-        if (fhnd == 0)
+        if (fhnd <= 0)
         {
-            return FALSE; //, -1, 0 # couldnot open it
+            return fhnd; //, -1, 0 # couldnot open it
         }
     }
 
@@ -240,8 +240,11 @@ BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LO
     DWORD readcountresult;
     BOOL readstat = FALSE;
     readstat = ReadFile(fhnd, rbytebuf, readsize, &readcountresult, 0); //#, overlapped )
-
-    return readstat ; // fhnd, werr, rbytebuf
+    if (!readstat)
+    {
+        return (HANDLE) 0;
+    }
+    return fhnd ; // fhnd, werr, rbytebuf
 }
 // W32_Write(fhnd, physpath, rbytebuf, readsize, offs) - execute the win32file Win32 API Write function, optionally open a handle
 BOOL  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs)
@@ -286,6 +289,8 @@ BOOL W32_lock_volume(HANDLE drivehandle)
         BOOL info = DeviceIoControl(drivehandle, ioctl, 0, 0, 0, 0, 0, 0); //#, None) #24)//info = win32file.DeviceIoControl(drivehandle, ioctl, None, None, None)#, None) #24)
         if (!info)
         {
+            int lasterr = GetLastError();
+            printf("LOCK FAIL GetLasterror() = %d", lasterr);
             return FALSE;
         }
         return TRUE;
@@ -313,7 +318,6 @@ BOOL W32_dismount_volume(LPCWSTR targetvolpath)
     DWORD ioctl = FSCTL_DISMOUNT_VOLUME; //0x00090020;// winioctl['FSCTL_DISMOUNT_VOLUME']
     BOOL info = DeviceIoControl(fhnd, ioctl, 0, 0, 0, 0, 0, 0);
     // add Handle to the Instance LIST OF HANDLES BEING DISMOUNTED ## fhandle.append(fhnd)
-
     return info;
 }
 
