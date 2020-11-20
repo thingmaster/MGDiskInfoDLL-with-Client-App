@@ -49,6 +49,22 @@ int main()
     myinfo.get_partitioninfo(4);
     myinfo.get_partitioninfo(5);
 
+    int dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    int dlresult = disklayout((LPWSTR) L"\\\\.\\PhysicalDrive0");
+    dlresult = disklayout((LPWSTR)L"\\\\.\\PhysicalDrive1");
+
+
+    int gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\C:"); // \\\\.\\PhysicalDrive0");
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\D:") ; // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\E:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\F:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\G:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\H:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\I:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\J:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\K:"); // 
+    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\L:"); // 
     char mychars[128], newchars[128];
     memcpy(mychars, "abcdefg\0", 8);
 

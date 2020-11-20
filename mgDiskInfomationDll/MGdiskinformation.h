@@ -44,6 +44,10 @@ extern "C" MGSTORAGEDLL_API BOOL W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID 
 extern "C" MGSTORAGEDLL_API BOOL W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs);
 extern "C" MGSTORAGEDLL_API BOOL W32_lock_volume(HANDLE drivehandle);
 extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );
+extern "C" MGSTORAGEDLL_API int diskgeometry(LPWSTR physicaldevpath);
+extern "C" MGSTORAGEDLL_API int disklayout(LPWSTR physicaldevpath);
+extern "C" MGSTORAGEDLL_API int getvolumediskinfo(LPWSTR wsvolpath);
+
 
 extern class mgdiskinfo(None);
 
