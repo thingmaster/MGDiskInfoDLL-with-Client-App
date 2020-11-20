@@ -180,7 +180,7 @@ public:
         char   psBuffer[128];
         FILE* pPipe;
 
-        if ((pPipe = _popen("smartctl --scan", "rt")) == NULL)
+        if ((pPipe = _popen("..\\x64\\release\\mgsmartctl --scan", "rt")) == NULL)
             exit(1);
         while (fgets(psBuffer, 128, pPipe)) {
             printf(psBuffer);
@@ -206,7 +206,7 @@ public:
         //mgjsonscanner mgj ;
 
         char cmdbuf[128];
-        sprintf_s(cmdbuf, "smartctl.exe -x /dev/sd%c", drivechar);
+        sprintf_s(cmdbuf, "..\\x64\\release\\mgsmartctl.exe -x /dev/sd%c", drivechar);
         if ((pPipe = _popen(cmdbuf, "rt")) == NULL)
             exit(1);
         while (fgets(psBuffer, 128, pPipe)) {

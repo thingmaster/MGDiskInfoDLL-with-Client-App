@@ -67,7 +67,7 @@ int main()
     gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\L:"); // 
 
     BYTE rbytebuf[2048];
-    HANDLE fhnd = W32_Read((HANDLE)0, (LPWSTR)L"\\\\.\\\\F:", rbytebuf, 2048, 0);
+    HANDLE fhnd = W32_Read((HANDLE)0, (LPWSTR)L"\\\\.\\\\D:", rbytebuf, 2048, 0);
     BOOL lockstat = W32_lock_volume(fhnd);
     if (lockstat)
     {
@@ -75,7 +75,7 @@ int main()
         for (int i = 16384; i < 400000000; i += 1000000)
         {
             printf("i=%d: %2x %2x %2x\n", i, rbytebuf[0], rbytebuf[1], rbytebuf[2]);
-            fhnd = W32_Read(fhnd, (LPWSTR)L"\\\\.\\\\F:", rbytebuf, 2048, i);
+            fhnd = W32_Read(fhnd, (LPWSTR)L"\\\\.\\\\D:", rbytebuf, 2048, i);
             if (!fhnd) 
             {
                 break;
@@ -84,13 +84,13 @@ int main()
     }
     CloseHandle(fhnd);
 
-    W32_dismount_volume((LPWSTR)L"\\\\.\\\\F:");
+    W32_dismount_volume((LPWSTR)L"\\\\.\\\\D:");
 
 
     char mychars[128], newchars[128];
     memcpy(mychars, "abcdefg\0", 8);
 
-    return 0;
+    //return 0;
 
 #ifndef DOSMARTMG
     myinfo.MGSMARTscan(0);
@@ -100,6 +100,8 @@ int main()
     myinfo.MGSMARTscan(4);
     myinfo.MGSMARTscan(5);
 #endif
+
+    return 0;
     myinfo.set_str(mychars);
     int getstrflg = myinfo.get_str(newchars);
     printf("mystr: %s", newchars);
