@@ -40,41 +40,52 @@ int main()
     printf("args %s", args[1]);
     argv = args;
 
-    mg_diskoperations myinfo;
+    //mg_deviceioctl myioctl ( );
+    //printf("%lx", myioctl.mg_printtest());
 
-    myinfo.get_partitioninfo(0);
-    myinfo.get_partitioninfo(1);
-    myinfo.get_partitioninfo(2);
-    myinfo.get_partitioninfo(3);
-    myinfo.get_partitioninfo(4);
-    myinfo.get_partitioninfo(5);
+    mg_diskgeometry mggeometry((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    mggeometry.mg_geometryextractdata();
+    mg_diskgeometry mggeometry1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    mggeometry1.mg_geometryextractdata();
 
-    int dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    dgresult = diskgeometry((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    int dlresult = disklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    dlresult = disklayout((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    mg_disklayout mgdisklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    mgdisklayout.mg_layoutextractdata();
+    mg_disklayout mgdisklayout1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    mgdisklayout1.mg_layoutextractdata();
 
+    wchar_t buf[128];
+    // extract DiskExtent information by-Volume C: - Z:
+    for (char i = 'C'; i <= 'Z'; i++)
+    {
+        swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\%c:", i);
+        mg_diskextents    mgdiskextents(buf); //(LPWSTR)L"\\\\.\\\\C:");
+        mgdiskextents.mg_extentsextractdata();
+    }
 
-    int gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\C:"); // \\\\.\\PhysicalDrive0");
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\D:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\E:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\F:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\G:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\H:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\I:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\J:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\K:"); // 
-    gvresult = getvolumediskinfo((LPWSTR)L"\\\\.\\\\L:"); // 
+    mg_partitioninfo  mgpartitioninfo((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    mgpartitioninfo.mg_partitionextractdata();
 
+    mg_partitioninfo  mgpartitioninfo1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    mgpartitioninfo1.mg_partitionextractdata();
+
+    // extract Partition Information by-Volume C: - Z:
+    for (char i = 'C'; i <= 'Z'; i++)
+    {
+        swprintf(buf, sizeof(buf)/sizeof(*buf), L"\\\\.\\%c:", i);
+        mg_partitioninfo  mgpartitioninfoF(buf); // (LPWSTR)L"\\\\.\\G:");
+        mgpartitioninfoF.mg_partitionextractdata();
+    }
+
+    // read some chunks of D: at 1,000,000 offset increments
     BYTE rbytebuf[2048];
     HANDLE fhnd = W32_Read((HANDLE)0, (LPWSTR)L"\\\\.\\\\D:", rbytebuf, 2048, 0);
     BOOL lockstat = W32_lock_volume(fhnd);
     if (lockstat)
     {
-        printf("LOCKED");
+        printf("D: LOCKED");
         for (int i = 16384; i < 400000000; i += 1000000)
         {
-            printf("i=%d: %2x %2x %2x\n", i, rbytebuf[0], rbytebuf[1], rbytebuf[2]);
+            printf("Read D:  @ i=%d: %2x %2x %2x\n", i, rbytebuf[0], rbytebuf[1], rbytebuf[2]);
             fhnd = W32_Read(fhnd, (LPWSTR)L"\\\\.\\\\D:", rbytebuf, 2048, i);
             if (!fhnd) 
             {
@@ -90,9 +101,10 @@ int main()
     char mychars[128], newchars[128];
     memcpy(mychars, "abcdefg\0", 8);
 
-    //return 0;
 
 #ifndef DOSMARTMG
+    mg_diskoperations myinfo;
+
     myinfo.MGSMARTscan(0);
     myinfo.MGSMARTscan(1);
     myinfo.MGSMARTscan(2);

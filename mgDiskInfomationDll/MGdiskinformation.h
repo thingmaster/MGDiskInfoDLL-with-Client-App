@@ -13,7 +13,7 @@
 //               { n = 1, b
 //               { n > 1, F(n-2) + F(n-1)
 // for some initial integral values a and b.
-// If the sequence is initialized F(0) = 1, F(1) = 1,
+// If the sequence is initiaized F(0) = 1, F(1) = 1,
 // then this relation produces the well-known Fibonacci
 // sequence: 1, 1, 2, 3, 5, 8, 13, 21, 34, ...
 
@@ -46,9 +46,476 @@ extern "C" MGSTORAGEDLL_API BOOL W32_lock_volume(HANDLE drivehandle);
 extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );
 extern "C" MGSTORAGEDLL_API int diskgeometry(LPWSTR physicaldevpath);
 extern "C" MGSTORAGEDLL_API int disklayout(LPWSTR physicaldevpath);
-extern "C" MGSTORAGEDLL_API int getvolumediskinfo(LPWSTR wsvolpath);
 
 
+
+#define IOCTLBUFFERSZ 2048
+
+extern "C" MGSTORAGEDLL_API class mg_deviceioctl {
+    HANDLE activehandle;
+    DWORD activeioctl;
+    DWORD lastioerror; 
+public:
+    BYTE  activeioctlbuffer[2048];
+    BYTE activedevicepath[256]; //LPWSTR = NULL;
+
+public:
+    mg_deviceioctl(DWORD newioctl=NULL)
+    {
+        this->activeioctl = newioctl;
+    };
+
+    BOOL mg_openforioctl(LPWSTR wszpath)
+    {
+        HANDLE hDevice = CreateFileW(wszpath,          // drive to open
+            0,                // no access to the drive
+            FILE_SHARE_READ | // share mode
+            FILE_SHARE_WRITE,
+            NULL,             // default security attributes
+            OPEN_EXISTING,    // disposition
+            0,                // file attributes
+            NULL);            // do not copy file attributes
+
+        if (hDevice == INVALID_HANDLE_VALUE)    // cannot open the drive
+        {
+            this->activehandle = 0;
+            this->lastioerror = GetLastError();
+            return (FALSE);
+        }
+        this->activehandle = hDevice; 
+        this->lastioerror = 0;
+        return TRUE;
+    }
+    BOOL mg_closeioctl()
+    {
+        CloseHandle(this->activehandle);
+    }
+    BOOL mg_executeioctl(LPWSTR wszpath)
+    {
+        if (!this->activehandle)
+        {
+            if (TRUE) //!this->activedevicepath)
+            {
+                if (wszpath) // for now until I debug the lstrcpyW
+                {
+                    //this->activedevicepath = wszpath;                   
+                    lstrcpyW((LPWSTR)this->activedevicepath, wszpath);
+                    if (FALSE)  // copying the lpwstr resulted in a string that CreateFile threw exception processing
+                    {
+                        BYTE tmptr[256];// = new BYTE(lstrlenW(wszpath) + 1);
+                        //this->activedevicepath = (LPWSTR)tmptr;
+                        //this->activedevicepath = new WCHAR(lstrlenW(wszpath)+1);
+                        printf("size %d\n", lstrlenW(wszpath) + 1);
+                        lstrcpyW((LPWSTR)this->activedevicepath, wszpath);
+                        wprintf(L"%d, %s\n", lstrlenW(wszpath), (LPWSTR)this->activedevicepath);
+                    }
+                }
+                else
+                {
+                    return FALSE; // no handle, no path.
+                }
+            }
+            if (!this->mg_openforioctl((LPWSTR)this->activedevicepath))
+            {
+                return FALSE; // unable to open path.
+            }
+        }
+        // now execute on the active handle
+        DWORD retbytecount = 0;
+        BOOL bResult = DeviceIoControl(this->activehandle, // target device 
+            this->activeioctl, // operation to perform
+            NULL, 0,                       // no input buffer
+            this->activeioctlbuffer, IOCTLBUFFERSZ,      // output buffer
+            &retbytecount,                 // # bytes returned
+            (LPOVERLAPPED)NULL);           // synchronous I/O
+        if (!bResult)
+        {
+            this->lastioerror = GetLastError();
+            return FALSE;
+        }
+        return TRUE;
+    }
+    DWORD mg_printtest(void)
+    {
+        printf("test");
+        return this->activeioctl;
+    }
+    int getactiveioctl()
+    {
+        return this->activeioctl;
+    }
+};
+
+
+extern "C" MGSTORAGEDLL_API class mg_diskgeometry : mg_deviceioctl {
+    int otherintval;
+
+public:
+    mg_diskgeometry(LPWSTR wszpath=NULL, int othervar=0 ) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
+    {
+        this->mg_executeioctl(wszpath);
+        printf("hello2");
+    };
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", this->getactiveioctl());
+        return this->getactiveioctl();
+    }
+
+    BOOL mg_geometryextractdata(void)
+    {
+        DISK_GEOMETRY* tmptr = (DISK_GEOMETRY*)&this->activeioctlbuffer;
+        if (!tmptr)
+        {
+            return FALSE;
+        }
+        //LARGE_INTEGER Cylinders;
+        //MEDIA_TYPE    MediaType; https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ne-winioctl-media_type
+        //DWORD         TracksPerCylinder;
+        //DWORD         SectorsPerTrack;
+        //DWORD         BytesPerSector;
+        //} DISK_GEOMETRY, * PDISK_GEOMETRY;
+        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_GEOMETRY** Drive path      = %ws\n", (LPWSTR)this->activedevicepath );
+        wprintf(L"\Media type: %d [Fixed %d, Removable %d, Unknown %d, others are Floppy media ]\n", tmptr->MediaType, MEDIA_TYPE::FixedMedia, MEDIA_TYPE::RemovableMedia, MEDIA_TYPE::Unknown);
+        wprintf(L"Cylinders       = %I64d\n", tmptr->Cylinders);
+        wprintf(L"Tracks/cylinder = %ld\n", (ULONG)tmptr->TracksPerCylinder);
+        wprintf(L"Sectors/track   = %ld\n", (ULONG)tmptr->SectorsPerTrack);
+        wprintf(L"Bytes/sector    = %ld\n", (ULONG)tmptr->BytesPerSector);
+
+        ULONGLONG DiskSize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
+            (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
+        wprintf(L"Disk size       = %I64d (Bytes)\n"
+            L"                = %.2f (Gb)\n",
+            DiskSize, (double)DiskSize / (1024 * 1024 * 1024));
+        return TRUE;
+    }
+};
+
+
+
+extern "C" MGSTORAGEDLL_API class mg_disklayout : mg_deviceioctl {
+    int otherintval;
+
+public:
+    mg_disklayout(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_LAYOUT_EX)
+    {
+        this->mg_executeioctl(wszpath);
+    }
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", this->getactiveioctl());
+        return this->getactiveioctl();
+    }
+
+    BOOL mg_layoutextractdata(void)
+    {
+        DRIVE_LAYOUT_INFORMATION_EX* tmptr = (DRIVE_LAYOUT_INFORMATION_EX*)this->activeioctlbuffer;
+        if (!tmptr)
+        {
+            return FALSE;
+        }
+        //typedef struct _DRIVE_LAYOUT_INFORMATION_EX {
+        //    ULONG                    PartitionStyle;
+        //    ULONG                    PartitionCount;
+        //    union {
+        //        DRIVE_LAYOUT_INFORMATION_MBR Mbr;
+        //        DRIVE_LAYOUT_INFORMATION_GPT Gpt;
+        //    } DUMMYUNIONNAME;
+        //    PARTITION_INFORMATION_EX PartitionEntry[1];
+        //} DRIVE_LAYOUT_INFORMATION_EX, * PDRIVE_LAYOUT_INFORMATION_EX; 
+        DRIVE_LAYOUT_INFORMATION_EX* pdg = (DRIVE_LAYOUT_INFORMATION_EX*)tmptr; 
+        //typedef struct _DRIVE_LAYOUT_INFORMATION_GPT {
+        //    GUID          DiskId;
+        //    LARGE_INTEGER StartingUsableOffset;
+        //    LARGE_INTEGER UsableLength;
+        //    DWORD         MaxPartitionCount;
+        //} DRIVE_LAYOUT_INFORMATION_GPT, * PDRIVE_LAYOUT_INFORMATION_GPT;
+        DRIVE_LAYOUT_INFORMATION_GPT* pdli_gpt = &pdg->Gpt;
+        //typedef struct _DRIVE_LAYOUT_INFORMATION_MBR {
+        //    DWORD Signature;
+        //    DWORD CheckSum;
+        //} DRIVE_LAYOUT_INFORMATION_MBR, * PDRIVE_LAYOUT_INFORMATION_MBR;
+        DRIVE_LAYOUT_INFORMATION_MBR* pdli_mbr = &pdg->Mbr;
+        PARTITION_INFORMATION_EX* p_pinfo = &pdg->PartitionEntry[0];
+        PARTITION_INFORMATION_MBR* p_pinfo_mbr;
+        PARTITION_INFORMATION_GPT* p_pinfo_gpt;
+        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_LAYOUT_EX** Drive path      = %ws\n", (LPWSTR)this->activedevicepath);
+        wprintf(L"PartitionStyle = %ld\n", (ULONG)pdg->PartitionStyle);
+        wprintf(L"PartitionCount   = %ld\n", (ULONG)pdg->PartitionCount);
+        switch (pdg->PartitionStyle)
+        {
+        case PARTITION_STYLE_MBR: // = 0,
+            wprintf(L"Signature = %ld\n", (ULONG)pdli_mbr->Signature);
+            wprintf(L"Checksum   = %ld\n", (ULONG)pdli_mbr->CheckSum);
+            for (int i = 0; i < pdg->PartitionCount; i++, p_pinfo++)
+            {
+                p_pinfo_mbr = &p_pinfo->Mbr;
+                p_pinfo_gpt = &p_pinfo->Gpt;
+                //------PARTITION_INFO_EX
+                //PARTITION_STYLE PartitionStyle;
+                //LARGE_INTEGER   StartingOffset;
+                //LARGE_INTEGER   PartitionLength;
+                //DWORD           PartitionNumber;
+                //BOOLEAN         RewritePartition;
+                //BOOLEAN         IsServicePartition;
+                //union {
+                //    PARTITION_INFORMATION_MBR Mbr;
+                //    PARTITION_INFORMATION_GPT Gpt;
+                //} DUMMYUNIONNAME;
+                wprintf(L"P Style = %ld\n", (ULONG)p_pinfo->PartitionStyle);
+                wprintf(L"Start offs   = %I64d\n", p_pinfo->StartingOffset);
+                wprintf(L"Part length  = %I64d\n", p_pinfo->PartitionLength);
+                wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
+                //typedef struct _PARTITION_INFORMATION_MBR {
+                //    BYTE    PartitionType;
+                //    BOOLEAN BootIndicator;
+                //    BOOLEAN RecognizedPartition;
+                //    DWORD   HiddenSectors;
+                //    GUID    PartitionId;
+                //} PARTITION_INFORMATION_MBR, * PPARTITION_INFORMATION_MBR
+                wprintf(L"P Type = %d\n", p_pinfo_mbr->PartitionType);
+                wprintf(L"Boot indicator   = %d\n", p_pinfo_mbr->BootIndicator);
+                wprintf(L"Recognized  = %d\n", p_pinfo_mbr->RecognizedPartition);
+                wprintf(L"Hidden sect  = %0lX\n", (ULONG)p_pinfo_mbr->HiddenSectors);
+                wprintf(L"GUID id  = %0lX\n", (GUID)p_pinfo_mbr->PartitionId);
+            }
+            break;
+        case PARTITION_STYLE_GPT: // = 1,
+            //------PARTITION_INFO_EX
+            //PARTITION_STYLE PartitionStyle;
+            //LARGE_INTEGER   StartingOffset;
+            //LARGE_INTEGER   PartitionLength;
+            //DWORD           PartitionNumber;
+            //BOOLEAN         RewritePartition;
+            //BOOLEAN         IsServicePartition;
+            //union {
+            //    PARTITION_INFORMATION_MBR Mbr;
+            //    PARTITION_INFORMATION_GPT Gpt;
+            //} DUMMYUNIONNAME;
+            wprintf(L"GPT DiskID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", pdli_gpt->DiskId.Data1, pdli_gpt->DiskId.Data2, pdli_gpt->DiskId.Data3,
+                pdli_gpt->DiskId.Data4[0], pdli_gpt->DiskId.Data4[1], pdli_gpt->DiskId.Data4[2], pdli_gpt->DiskId.Data4[3],
+                pdli_gpt->DiskId.Data4[4], pdli_gpt->DiskId.Data4[5], pdli_gpt->DiskId.Data4[6], pdli_gpt->DiskId.Data4[7]);
+            // % I64X\n", pdli_gpt->DiskId);
+            wprintf(L"MaxPartCount   = %ld\n", (ULONG)pdli_gpt->MaxPartitionCount);
+            wprintf(L"Start usable offs= %016I64XX (%I64d)\n", pdli_gpt->StartingUsableOffset, pdli_gpt->StartingUsableOffset);
+            wprintf(L"MaxPart= %ld\n", (ULONG)pdli_gpt->MaxPartitionCount);
+            for (int i = 0; i < pdg->PartitionCount; i++, p_pinfo++)
+            {
+                p_pinfo_mbr = &p_pinfo->Mbr;
+                p_pinfo_gpt = &p_pinfo->Gpt;
+                //------PARTITION_INFO_EX
+                //PARTITION_STYLE PartitionStyle;
+                //LARGE_INTEGER   StartingOffset;
+                //LARGE_INTEGER   PartitionLength;
+                //DWORD           PartitionNumber;
+                //BOOLEAN         RewritePartition;
+                //BOOLEAN         IsServicePartition;
+                //union {
+                //    PARTITION_INFORMATION_MBR Mbr;
+                //    PARTITION_INFORMATION_GPT Gpt;
+                //} DUMMYUNIONNAME;
+                wprintf(L"P Style = %ld\n", (ULONG)p_pinfo->PartitionStyle);
+                wprintf(L"Start offs   = %016I64XX (%I64d)\n", p_pinfo->StartingOffset, p_pinfo->StartingOffset);
+                wprintf(L"Part length  = %016I64XX (%I64d)\n", p_pinfo->PartitionLength, p_pinfo->PartitionLength);
+                wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
+                //typedef struct _PARTITION_INFORMATION_GPT {
+                //    GUID    PartitionType;
+                //    GUID    PartitionId;
+                //    DWORD64 Attributes;
+                //    WCHAR   Name[36];
+                //} PARTITION_INFORMATION_GPT, * PPARTITION_INFORMATION_GPT;
+                wprintf(L"GPT Partition Type GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                    p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
+                    p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+                wprintf(L"GPT Partition ID GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionId.Data1, p_pinfo_gpt->PartitionId.Data2, p_pinfo_gpt->PartitionId.Data3,
+                    p_pinfo_gpt->PartitionId.Data4[0], p_pinfo_gpt->PartitionId.Data4[1], p_pinfo_gpt->PartitionId.Data4[2], p_pinfo_gpt->PartitionId.Data4[3],
+                    p_pinfo_gpt->PartitionId.Data4[4], p_pinfo_gpt->PartitionId.Data4[5], p_pinfo_gpt->PartitionId.Data4[6], p_pinfo_gpt->PartitionId.Data4[7]);
+                wprintf(L"Attributes  =  %016I64X\n", p_pinfo_gpt->Attributes);
+                wprintf(L"Name = %ws\n", (ULONG)p_pinfo_gpt->Name);
+            }
+            break;
+
+        case PARTITION_STYLE_RAW: // = 2
+        default:
+            break;
+        }
+        return TRUE;
+    }
+};
+
+
+extern "C" MGSTORAGEDLL_API class mg_diskextents : mg_deviceioctl {
+    int otherintval;
+
+public:
+    mg_diskextents(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS)
+    {
+        this->mg_executeioctl(wszpath);
+    }
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", this->getactiveioctl());
+        return this->getactiveioctl();
+    }
+
+    BOOL mg_extentsextractdata(void)
+    {
+        VOLUME_DISK_EXTENTS* tmptr = (VOLUME_DISK_EXTENTS*)this->activeioctlbuffer;
+        if (!tmptr)
+        {
+            return FALSE;
+        }
+        //typedef struct _VOLUME_DISK_EXTENTS {
+        //    DWORD       NumberOfDiskExtents;
+        //    DISK_EXTENT Extents[ANYSIZE_ARRAY];
+        //} VOLUME_DISK_EXTENTS, * PVOLUME_DISK_EXTENTS;
+        //typedef struct _DISK_EXTENT {
+        //   DWORD         DiskNumber;
+        //    LARGE_INTEGER StartingOffset;
+        //    LARGE_INTEGER ExtentLength;
+        //} DISK_EXTENT, * PDISK_EXTENT;
+
+        DISK_EXTENT* p_pinfo = &tmptr->Extents[0];
+        if (!tmptr->NumberOfDiskExtents)
+        {
+            //wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s. Partition length ZERO.\n", (LPWSTR)this->activedevicepath);
+            return FALSE;
+        }
+
+        wprintf(L"\n **IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS** Drive path      = %ws\n", (LPWSTR)this->activedevicepath);
+        wprintf(L"N Extents = %ld\n", (ULONG)tmptr->NumberOfDiskExtents);
+        for (int i = 0; i < tmptr->NumberOfDiskExtents; i++, p_pinfo++)
+        {
+            wprintf(L"P Disk Num = %ld\n", (ULONG)p_pinfo->DiskNumber);
+            wprintf(L"Start offs   = %I64d\n", p_pinfo->StartingOffset);
+            wprintf(L"Part length  = %I64d\n", p_pinfo->ExtentLength);
+        }
+        return TRUE;
+    }
+};
+
+extern "C" MGSTORAGEDLL_API class mg_partitioninfo : mg_deviceioctl {
+    int otherintval;
+
+public:
+    mg_partitioninfo(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
+    {
+        this->mg_executeioctl(wszpath);
+    }
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", this->getactiveioctl());
+        return this->getactiveioctl();
+    }
+
+    BOOL mg_partitionextractdata(void)
+    {
+        PARTITION_INFORMATION_EX* tmptr = (PARTITION_INFORMATION_EX*)this->activeioctlbuffer;
+        if (!tmptr)
+        {
+            return FALSE;
+        }
+        //typedef struct _PARTITION_INFORMATION_EX {
+        //    PARTITION_STYLE PartitionStyle;
+        //    LARGE_INTEGER   StartingOffset;
+        //    LARGE_INTEGER   PartitionLength;
+        //    DWORD           PartitionNumber;
+        //    BOOLEAN         RewritePartition;
+        //    BOOLEAN         IsServicePartition;
+        //    union {
+        //        PARTITION_INFORMATION_MBR Mbr;
+        //        PARTITION_INFORMATION_GPT Gpt;
+        //    } DUMMYUNIONNAME;
+        //} PARTITION_INFORMATION_EX, * PPARTITION_INFORMATION_EX;
+        if (!tmptr->PartitionLength.HighPart && !tmptr->PartitionLength.LowPart)
+        {
+            //wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s. Partition length ZERO.\n", (LPWSTR)this->activedevicepath);
+            return FALSE;
+        }
+        wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s, Partition style: %d\n", (LPWSTR)this->activedevicepath, tmptr->PartitionStyle);
+        wprintf(L"Start offs   = %016I64XX (%I64d)\n", tmptr->StartingOffset, tmptr->StartingOffset);
+        wprintf(L"Part length  = %016I64XX (%I64d)\n", tmptr->PartitionLength, tmptr->PartitionLength);
+        wprintf(L"Part Number  = %ld\n", (ULONG)tmptr->PartitionNumber);
+        printf("IsServicePartition %d\n", tmptr->IsServicePartition);
+        printf("RewritePartition %d\n", tmptr->RewritePartition);
+        unsigned long long myval64 = tmptr->PartitionLength.HighPart;
+        myval64 <<= 32;
+        myval64 += tmptr->PartitionLength.LowPart;
+        PARTITION_INFORMATION_MBR* p_pinfo_mbr = &tmptr->Mbr;
+        PARTITION_INFORMATION_GPT* p_pinfo_gpt = &tmptr->Gpt;
+        switch (tmptr->PartitionStyle)
+        {
+        case PARTITION_STYLE_MBR: // = 0,
+            //typedef struct _PARTITION_INFORMATION_MBR {
+            //    BYTE    PartitionType;
+            //    BOOLEAN BootIndicator;
+            //    BOOLEAN RecognizedPartition;
+            //    DWORD   HiddenSectors;
+            //    GUID    PartitionId;
+            //} PARTITION_INFORMATION_MBR, * PPARTITION_INFORMATION_MBR
+            wprintf(L"MBR P Type = %d\n", p_pinfo_mbr->PartitionType);
+            wprintf(L"Boot indicator   = %d\n", p_pinfo_mbr->BootIndicator);
+            wprintf(L"Recognized  = %d\n", p_pinfo_mbr->RecognizedPartition);
+            wprintf(L"Hidden sect  = %0lX\n", (ULONG)p_pinfo_mbr->HiddenSectors);
+            wprintf(L"GUID id  = %0lX\n", (GUID)p_pinfo_mbr->PartitionId);
+            break;
+        case PARTITION_STYLE_GPT: // = 1,
+            //typedef struct _PARTITION_INFORMATION_GPT {
+            //    GUID    PartitionType;
+            //    GUID    PartitionId;
+            //    DWORD64 Attributes;
+            //    WCHAR   Name[36];
+            //} PARTITION_INFORMATION_GPT, * PPARTITION_INFORMATION_GPT;
+            wprintf(L"GPT Partition Type GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
+                p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+            wprintf(L"GPT Partition ID GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionId.Data1, p_pinfo_gpt->PartitionId.Data2, p_pinfo_gpt->PartitionId.Data3,
+                p_pinfo_gpt->PartitionId.Data4[0], p_pinfo_gpt->PartitionId.Data4[1], p_pinfo_gpt->PartitionId.Data4[2], p_pinfo_gpt->PartitionId.Data4[3],
+                p_pinfo_gpt->PartitionId.Data4[4], p_pinfo_gpt->PartitionId.Data4[5], p_pinfo_gpt->PartitionId.Data4[6], p_pinfo_gpt->PartitionId.Data4[7]);
+
+            wprintf(L"Boot indicator   = %lx\n", p_pinfo_gpt->PartitionId);
+            wprintf(L"Attributes  =  %016I64X\n", p_pinfo_gpt->Attributes);
+            wprintf(L"Name = %ws\n", (ULONG)p_pinfo_gpt->Name);
+            break;
+
+        case PARTITION_STYLE_RAW: // = 2
+            wprintf(L"RAW Partition style not decoded\n");
+        default:
+            break;
+        }
+        return TRUE;
+    }
+};
+
+//extern "C" MGSTORAGEDLL_API mg_deviceioctl* mg_deviceioctl_create(HANDLE a, DWORD b) {
+//    return new mg_deviceioctl(a, b);
+//}
+
+//IOCTL_VOLUME_LOGICAL_TO_PHYSICAL 
+//typedef struct _VOLUME_PHYSICAL_OFFSETS {
+//    ULONG                  NumberOfPhysicalOffsets;
+//    VOLUME_PHYSICAL_OFFSET PhysicalOffset[ANYSIZE_ARRAY];
+//} VOLUME_PHYSICAL_OFFSETS, * PVOLUME_PHYSICAL_OFFSETS;
+
+//IOCTL_VOLUME_PHYSICAL_TO_LOGICAL
+//typedef struct _VOLUME_PHYSICAL_OFFSET {
+//   ULONG    DiskNumber;
+//    LONGLONG Offset;
+//} VOLUME_PHYSICAL_OFFSET, * PVOLUME_PHYSICAL_OFFSET;
+
+//IOCTL_DISK_GET_LENGTH_INFO  
+//typedef struct _GET_LENGTH_INFORMATION {
+//    LARGE_INTEGER Length;
+//} GET_LENGTH_INFORMATION, * PGET_LENGTH_INFORMATION;
+
+//IOCTL_STORAGE_GET_MEDIA_TYPES 
+//typedef struct _DISK_GEOMETRY {
+//LARGE_INTEGER Cylinders;
+//MEDIA_TYPE    MediaType;
+//DWORD         TracksPerCylinder;
+//DWORD         SectorsPerTrack;
+//DWORD         BytesPerSector;
+//} DISK_GEOMETRY, * PDISK_GEOMETRY;
 extern class mgdiskinfo(None);
 
 
@@ -59,7 +526,7 @@ extern class mgdiskinfo(None);
 // Disk Information  
 class MGSTORAGEDLL_API mg_diskoperations {
 
-    // ...
+    // 
     char m_mystr[128]{ "hello\0" };
     TCHAR m_mytempfilename[sizeof(WCHAR) * MAX_PATH];
     enum m_diskfields { DP_ID, DP_Type, DP_Status, DP_Path };
@@ -244,57 +711,6 @@ public:
         return 0;
     }
 
-public:
-    int get_partitioninfo(int diskno = 0) {
-        HANDLE hDevice = 0;
-        int stat;
-        LPVOID lpOutBuffer = NULL;
-        DWORD nOutBufferSize = 0;
-        LPDWORD lpBytesReturned = NULL;
-        LPOVERLAPPED lpOverlapped = NULL;
-        PARTITION_INFORMATION_EX pdg;
-        // open device //physicaldisk<n>
-        //hDevice = CreateFile(TEXT("\\\\.\\C:"), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ |
-        //        FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-        LPCWSTR diskpath[6] = { L"\\\\.\\PhysicalDrive0",
-            L"\\\\.\\PhysicalDrive1",
-            L"\\\\.\\PhysicalDrive2",
-            L"\\\\.\\PhysicalDrive3",
-            L"\\\\.\\PhysicalDrive4",
-            L"\\\\.\\PhysicalDrive5" };
-        printf("*** DISK PARTITION INFO DISK <%d> ***\n", diskno);
-        if (diskno >= sizeof(diskpath)/sizeof(LPCWSTR)) {
-            return -1;
-        }
-        hDevice = CreateFile(diskpath[diskno], GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
-        if (hDevice) {
-            //W32_lock_volume(handle)
-        }
-        if (hDevice <= 0) {
-            return 0;
-        }
-        stat = DeviceIoControl(
-            (HANDLE)hDevice,                 // handle to a partition
-            IOCTL_DISK_GET_PARTITION_INFO_EX, // dwIoControlCode
-            NULL,                             // lpInBuffer
-            0,                                // nInBufferSize
-            (LPVOID)&pdg,             // output buffer
-            (DWORD)sizeof(pdg),           // size of output buffer
-            (LPDWORD)lpBytesReturned,        // number of bytes returned
-            (LPOVERLAPPED)lpOverlapped);      // OVERLAPPED structure 
-
-        unsigned long long myval64 = pdg.PartitionLength.HighPart;
-        myval64 <<= 32;
-        myval64 += pdg.PartitionLength.LowPart;
-
-        if (stat == 1) {
-            printf("GetParitionInfo_EX IOCTL: Disk %d; Parition type: GPT:%d, Len: %llu: Partition #: %d \n", diskno, pdg.PartitionStyle, myval64, pdg.PartitionNumber);
-        }
-
-        // close the device(hDevice)
-        CloseHandle(hDevice);
-        return stat;
-    }
 public:
     TCHAR *get_tempfilename(char* c128buff) {
         HANDLE hFile = INVALID_HANDLE_VALUE;
