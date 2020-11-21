@@ -240,7 +240,10 @@ public:
         PARTITION_INFORMATION_MBR* p_pinfo_mbr;
         PARTITION_INFORMATION_GPT* p_pinfo_gpt;
         wprintf(L"\n **IOCTL_DISK_GET_DRIVE_LAYOUT_EX** Drive path      = %ws\n", (LPWSTR)this->activedevicepath);
-        wprintf(L"PartitionStyle = %ld\n", (ULONG)pdg->PartitionStyle);
+        wprintf(L"PartitionStyle = %ld [MBR %d, GPT %d, RAW %d]\n", (ULONG)pdg->PartitionStyle,
+            PARTITION_STYLE::PARTITION_STYLE_MBR,
+            PARTITION_STYLE::PARTITION_STYLE_GPT,
+            PARTITION_STYLE::PARTITION_STYLE_RAW);
         wprintf(L"PartitionCount   = %ld\n", (ULONG)pdg->PartitionCount);
         switch (pdg->PartitionStyle)
         {
@@ -262,7 +265,11 @@ public:
                 //    PARTITION_INFORMATION_MBR Mbr;
                 //    PARTITION_INFORMATION_GPT Gpt;
                 //} DUMMYUNIONNAME;
-                wprintf(L"P Style = %ld\n", (ULONG)p_pinfo->PartitionStyle);
+                wprintf(L"\nPart Style = %ld  [MBR %d, GPT %d, RAW %d]\n", (ULONG)p_pinfo->PartitionStyle,
+                    PARTITION_STYLE::PARTITION_STYLE_MBR,
+                    PARTITION_STYLE::PARTITION_STYLE_GPT,
+                    PARTITION_STYLE::PARTITION_STYLE_RAW);
+
                 wprintf(L"Start offs   = %I64d\n", p_pinfo->StartingOffset);
                 wprintf(L"Part length  = %I64d\n", p_pinfo->PartitionLength);
                 wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
@@ -298,7 +305,6 @@ public:
             // % I64X\n", pdli_gpt->DiskId);
             wprintf(L"MaxPartCount   = %ld\n", (ULONG)pdli_gpt->MaxPartitionCount);
             wprintf(L"Start usable offs= %016I64XX (%I64d)\n", pdli_gpt->StartingUsableOffset, pdli_gpt->StartingUsableOffset);
-            wprintf(L"MaxPart= %ld\n", (ULONG)pdli_gpt->MaxPartitionCount);
             for (int i = 0; i < pdg->PartitionCount; i++, p_pinfo++)
             {
                 p_pinfo_mbr = &p_pinfo->Mbr;
@@ -314,7 +320,10 @@ public:
                 //    PARTITION_INFORMATION_MBR Mbr;
                 //    PARTITION_INFORMATION_GPT Gpt;
                 //} DUMMYUNIONNAME;
-                wprintf(L"P Style = %ld\n", (ULONG)p_pinfo->PartitionStyle);
+                wprintf(L"\nPart Style = %ld [MBR %d, GPT %d, RAW %d]\n", (ULONG)p_pinfo->PartitionStyle,
+                    PARTITION_STYLE::PARTITION_STYLE_MBR,
+                    PARTITION_STYLE::PARTITION_STYLE_GPT,
+                    PARTITION_STYLE::PARTITION_STYLE_RAW);
                 wprintf(L"Start offs   = %016I64XX (%I64d)\n", p_pinfo->StartingOffset, p_pinfo->StartingOffset);
                 wprintf(L"Part length  = %016I64XX (%I64d)\n", p_pinfo->PartitionLength, p_pinfo->PartitionLength);
                 wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
