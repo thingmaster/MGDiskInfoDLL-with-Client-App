@@ -44,8 +44,8 @@ extern "C" MGSTORAGEDLL_API HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOI
 extern "C" MGSTORAGEDLL_API BOOL W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs);
 extern "C" MGSTORAGEDLL_API BOOL W32_lock_volume(HANDLE drivehandle);
 extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );
-extern "C" MGSTORAGEDLL_API int diskgeometry(LPWSTR physicaldevpath);
-extern "C" MGSTORAGEDLL_API int disklayout(LPWSTR physicaldevpath);
+//extern "C" MGSTORAGEDLL_API int diskgeometry(LPWSTR physicaldevpath);
+//extern "C" MGSTORAGEDLL_API int disklayout(LPWSTR physicaldevpath);
 
 
 
@@ -149,21 +149,42 @@ public:
 
 extern "C" MGSTORAGEDLL_API class mg_diskgeometry : mg_deviceioctl {
     int otherintval;
+    BOOL ioctl_status = FALSE;
+    wchar_t pathbuf[128];
 
 public:
+    mg_diskgeometry(int devicenumber) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
+    {
+        swprintf(this->pathbuf, sizeof(this->pathbuf) / sizeof(*this->pathbuf), L"\\\\.\\PhysicalDrive%d", devicenumber);
+        this->ioctl_status = this->mg_executeioctl(this->pathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+    }
     mg_diskgeometry(LPWSTR wszpath=NULL, int othervar=0 ) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
     {
-        this->mg_executeioctl(wszpath);
-        printf("hello2");
+        this->ioctl_status = this->mg_executeioctl(wszpath);
+        //COPY THE wszpath to pathbuf
     };
+    BOOL mg_geometry_info_valid()
+    {
+        return this->ioctl_status;
+    }
+    LPWSTR mg_devicepath()
+    {
+        if (this->mg_geometry_info_valid())
+            return (LPWSTR) &this->activedevicepath;
+        return NULL;
+    }
     DWORD mg_printdisks(void)
     {
         printf("\ndisks %d\n", this->getactiveioctl());
         return this->getactiveioctl();
     }
 
-    BOOL mg_geometryextractdata(void)
+    BOOL mg_geometryextractdata(long long *geometryinfo=NULL, BOOL outputflag=FALSE)
     {
+        if (!this->ioctl_status)
+        {
+            return FALSE;
+        }
         DISK_GEOMETRY* tmptr = (DISK_GEOMETRY*)&this->activeioctlbuffer;
         if (!tmptr)
         {
@@ -181,6 +202,19 @@ public:
         wprintf(L"Tracks/cylinder = %ld\n", (ULONG)tmptr->TracksPerCylinder);
         wprintf(L"Sectors/track   = %ld\n", (ULONG)tmptr->SectorsPerTrack);
         wprintf(L"Bytes/sector    = %ld\n", (ULONG)tmptr->BytesPerSector);
+        if (geometryinfo)
+        {
+            geometryinfo[0] = tmptr->MediaType;
+            geometryinfo[1] = tmptr->Cylinders.QuadPart ;
+            geometryinfo[2] = tmptr->TracksPerCylinder;
+            geometryinfo[3] = tmptr->SectorsPerTrack;
+            geometryinfo[4] = tmptr->BytesPerSector;
+            geometryinfo[5] = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
+                (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
+        }
+
+        if (!outputflag)
+            return TRUE;
 
         ULONGLONG DiskSize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
             (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
@@ -207,7 +241,7 @@ public:
         return this->getactiveioctl();
     }
 
-    BOOL mg_layoutextractdata(void)
+    BOOL mg_layoutextractdata(long long *layoutinfo=NULL, BOOL outputflag=FALSE)
     {
         DRIVE_LAYOUT_INFORMATION_EX* tmptr = (DRIVE_LAYOUT_INFORMATION_EX*)this->activeioctlbuffer;
         if (!tmptr)
@@ -239,6 +273,11 @@ public:
         PARTITION_INFORMATION_EX* p_pinfo = &pdg->PartitionEntry[0];
         PARTITION_INFORMATION_MBR* p_pinfo_mbr;
         PARTITION_INFORMATION_GPT* p_pinfo_gpt;
+        if (layoutinfo)
+        {
+            layoutinfo[0] = tmptr->PartitionStyle;
+            layoutinfo[1] = tmptr->PartitionCount;
+        }
         wprintf(L"\n **IOCTL_DISK_GET_DRIVE_LAYOUT_EX** Drive path      = %ws\n", (LPWSTR)this->activedevicepath);
         wprintf(L"PartitionStyle = %ld [MBR %d, GPT %d, RAW %d]\n", (ULONG)pdg->PartitionStyle,
             PARTITION_STYLE::PARTITION_STYLE_MBR,
@@ -250,6 +289,11 @@ public:
         case PARTITION_STYLE_MBR: // = 0,
             wprintf(L"Signature = %ld\n", (ULONG)pdli_mbr->Signature);
             wprintf(L"Checksum   = %ld\n", (ULONG)pdli_mbr->CheckSum);
+            if (layoutinfo)
+            {
+                layoutinfo[2] = pdli_mbr->Signature;
+                layoutinfo[3] = pdli_mbr->CheckSum;
+            }
             for (int i = 0; i < pdg->PartitionCount; i++, p_pinfo++)
             {
                 p_pinfo_mbr = &p_pinfo->Mbr;
@@ -305,6 +349,11 @@ public:
             // % I64X\n", pdli_gpt->DiskId);
             wprintf(L"MaxPartCount   = %ld\n", (ULONG)pdli_gpt->MaxPartitionCount);
             wprintf(L"Start usable offs= %016I64XX (%I64d)\n", pdli_gpt->StartingUsableOffset, pdli_gpt->StartingUsableOffset);
+            if (layoutinfo)
+            {
+                layoutinfo[2] = pdli_gpt->MaxPartitionCount;
+                layoutinfo[3] = pdli_gpt->StartingUsableOffset.QuadPart;
+            }
             for (int i = 0; i < pdg->PartitionCount; i++, p_pinfo++)
             {
                 p_pinfo_mbr = &p_pinfo->Mbr;
@@ -367,7 +416,7 @@ public:
         return this->getactiveioctl();
     }
 
-    BOOL mg_extentsextractdata(void)
+    BOOL mg_extentsextractdata(long long *pextents4=NULL)
     {
         VOLUME_DISK_EXTENTS* tmptr = (VOLUME_DISK_EXTENTS*)this->activeioctlbuffer;
         if (!tmptr)
@@ -390,7 +439,17 @@ public:
             //wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s. Partition length ZERO.\n", (LPWSTR)this->activedevicepath);
             return FALSE;
         }
-
+        if (pextents4)
+        {
+            pextents4[0] = tmptr->NumberOfDiskExtents;
+            pextents4[1] = p_pinfo->DiskNumber;
+            pextents4[2] = (long long)(p_pinfo->StartingOffset.HighPart);
+            pextents4[2] = pextents4[2] << 32;
+            pextents4[2] += p_pinfo->StartingOffset.LowPart;;
+            pextents4[3] = (long long)p_pinfo->ExtentLength.HighPart;
+            pextents4[3] = pextents4[3] << 32;
+            pextents4[3] += p_pinfo->ExtentLength.LowPart;
+        }
         wprintf(L"\n **IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS** Drive path      = %ws\n", (LPWSTR)this->activedevicepath);
         wprintf(L"N Extents = %ld\n", (ULONG)tmptr->NumberOfDiskExtents);
         for (int i = 0; i < tmptr->NumberOfDiskExtents; i++, p_pinfo++)
@@ -405,11 +464,31 @@ public:
 
 extern "C" MGSTORAGEDLL_API class mg_partitioninfo : mg_deviceioctl {
     int otherintval;
-
+    wchar_t volumepathbuf[128];
+    BOOL mg_partition_info_valid;
 public:
+    mg_partitioninfo(char driveletter, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
+    {
+        swprintf(this->volumepathbuf, sizeof(this->volumepathbuf) / sizeof(*this->volumepathbuf), L"\\\\.\\%c:", driveletter);
+        this->mg_partition_info_valid = this->mg_executeioctl(this->volumepathbuf);
+    }
+
     mg_partitioninfo(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
     {
-        this->mg_executeioctl(wszpath);
+        this->mg_partition_info_valid = this->mg_executeioctl(wszpath);
+    }
+    BOOL mg_is_partition_info_valid()
+    {
+        return this->mg_partition_info_valid;
+    }
+
+    LPWSTR mg_getpartitionvolumepath()
+    {
+        if (!this->mg_partition_info_valid)
+        {
+            return NULL;
+        }
+        return (LPWSTR)&this->volumepathbuf;
     }
     DWORD mg_printdisks(void)
     {
@@ -417,8 +496,10 @@ public:
         return this->getactiveioctl();
     }
 
-    BOOL mg_partitionextractdata(void)
+    BOOL mg_partitionextractdata(long long* ppartdata6 = NULL, BOOL  outputflag=TRUE)
     {
+        if (!this->mg_partition_info_valid)
+            return FALSE;
         PARTITION_INFORMATION_EX* tmptr = (PARTITION_INFORMATION_EX*)this->activeioctlbuffer;
         if (!tmptr)
         {
@@ -447,11 +528,26 @@ public:
         wprintf(L"Part Number  = %ld\n", (ULONG)tmptr->PartitionNumber);
         printf("IsServicePartition %d\n", tmptr->IsServicePartition);
         printf("RewritePartition %d\n", tmptr->RewritePartition);
+
         unsigned long long myval64 = tmptr->PartitionLength.HighPart;
         myval64 <<= 32;
         myval64 += tmptr->PartitionLength.LowPart;
         PARTITION_INFORMATION_MBR* p_pinfo_mbr = &tmptr->Mbr;
         PARTITION_INFORMATION_GPT* p_pinfo_gpt = &tmptr->Gpt;
+
+        if (ppartdata6)
+        {
+            ppartdata6[0] = tmptr->PartitionStyle;
+            ppartdata6[1] = tmptr->PartitionNumber;
+            ppartdata6[2] = tmptr->StartingOffset.HighPart;
+            ppartdata6[2] <<= 32;
+            ppartdata6[2] += tmptr->StartingOffset.LowPart;
+            ppartdata6[3] = tmptr->PartitionLength.HighPart;
+            ppartdata6[3] <<= 32;
+            ppartdata6[3] += tmptr->PartitionLength.LowPart;
+            ppartdata6[4] = tmptr->IsServicePartition;
+            ppartdata6[5] = tmptr->RewritePartition;
+        }
         switch (tmptr->PartitionStyle)
         {
         case PARTITION_STYLE_MBR: // = 0,
@@ -887,5 +983,184 @@ private:
             NULL);
 
         return((LPCTSTR)lpMsgBuf);
+    }
+};
+
+
+class mg_volumeitem {
+    BOOL validvolume = FALSE;
+    CHAR  RootPathName[1024];
+    DWORD SectorsPerCluster;
+    DWORD BytesPerSector;
+    DWORD NumberOfFreeClusters;
+    DWORD TotalNumberOfClusters;
+    long long partitioninfo[6];
+    long long extentsinfo[4];
+
+public:
+    mg_volumeitem(char volroot) {
+        mg_partitioninfo* mypartitioninfo = new mg_partitioninfo(volroot); // A (LPWSTR)L"\\\\.\\G:");
+        //char volroot = 'A' + j;
+        if (!mypartitioninfo->mg_is_partition_info_valid())
+        {
+            return;
+        }
+        mypartitioninfo->mg_partitionextractdata(partitioninfo);
+        printf("partitioninfo: partitionstyle: %lld, partition count#: %lld, start: %llxH (%lld), size: %llxH (%lld), isservice %lld, isrewrite %lld\n",
+            partitioninfo[0],
+            partitioninfo[1],
+            partitioninfo[2], partitioninfo[2],
+            partitioninfo[3], partitioninfo[3],
+            partitioninfo[4],
+            partitioninfo[5]);
+        LPWSTR buf = mypartitioninfo->mg_getpartitionvolumepath();
+        //LPCSTR buf1 = (LPCSTR) strrchr((char *)buf, '\\');
+        char buf1[] = { volroot, ':','\\', '\0' };
+        BOOL freeresult = GetDiskFreeSpaceA(
+            (LPCSTR)buf1,
+            &SectorsPerCluster,
+            &BytesPerSector,
+            &NumberOfFreeClusters,
+            &TotalNumberOfClusters);
+        if (!freeresult)
+        {
+            return;
+        }
+        long long freespace = NumberOfFreeClusters;
+        freespace *= BytesPerSector * SectorsPerCluster;
+        long long totalspace = TotalNumberOfClusters;
+        totalspace *= BytesPerSector * SectorsPerCluster;
+
+        printf("Freespace: %lld, UsedSpace: %lld, Totalspace: %lld, ",
+            freespace,
+            totalspace - freespace,
+            totalspace);
+        printf("free: spc %ld,\n bps %ld,\n BPC %ld,\n freeclusters %ld,\n totalclusters %ld \n",
+            SectorsPerCluster,
+            BytesPerSector,
+            SectorsPerCluster * BytesPerSector,
+            NumberOfFreeClusters,
+            TotalNumberOfClusters);
+
+        // Volume Info Request
+        char VolumeNameBuffer[MAX_PATH + 1];
+        DWORD   nVolumeNameSize = MAX_PATH + 1;
+        DWORD VolumeSerialNumber;
+        DWORD MaximumComponentLength;
+        DWORD FileSystemFlags;
+        char    lpFileSystemNameBuffer[MAX_PATH + 1];
+        DWORD   nFileSystemNameSize = MAX_PATH + 1;
+        BOOL viresult = GetVolumeInformationA(
+            (LPCSTR)buf1,
+            (LPSTR)VolumeNameBuffer,
+            nVolumeNameSize,
+            &VolumeSerialNumber,
+            &MaximumComponentLength,
+            &FileSystemFlags,
+            (LPSTR)lpFileSystemNameBuffer,
+            nFileSystemNameSize
+        );
+        if (!viresult)
+        {
+            return;
+        }
+        printf("VolumeInfo: name(%s),\n filesys(%s),\n serial#(%0lxH)\n",
+            VolumeNameBuffer,
+            lpFileSystemNameBuffer,
+            VolumeSerialNumber);
+        mg_diskextents* mydiskextents = new mg_diskextents(buf); //(LPWSTR)L"\\\\.\\\\C:");
+        mydiskextents->mg_extentsextractdata(extentsinfo);
+        printf("extents: nextents: %lld, disk #: %lld, start: %lld, size: %lld\n",
+            extentsinfo[0],
+            extentsinfo[1],
+            extentsinfo[2],
+            extentsinfo[3]);
+        this->validvolume = TRUE;
+    }
+};
+
+extern "C" MGSTORAGEDLL_API class mg_systemdisks {
+    //mg_diskitem* physicaldevices[32] ;
+    mg_volumeitem* logicalvolumes[26] ;
+
+
+public:
+    mg_systemdisks(int i)
+    {
+        LPWSTR buf;
+        CHAR  RootPathName[1024];
+        // Free Space Request data
+        DWORD SectorsPerCluster;
+        DWORD BytesPerSector;
+        DWORD NumberOfFreeClusters;
+        DWORD TotalNumberOfClusters;
+        // Volume Info Request
+        char VolumeNameBuffer[MAX_PATH + 1];
+        DWORD   nVolumeNameSize = MAX_PATH + 1;
+        DWORD VolumeSerialNumber;
+        DWORD MaximumComponentLength;
+        DWORD FileSystemFlags;
+        char    lpFileSystemNameBuffer[MAX_PATH + 1];
+        DWORD   nFileSystemNameSize = MAX_PATH + 1;
+        long long freespace;
+        long long totalspace;
+        mg_diskgeometry* mygeometry;
+        for (int i = 0; i < 16; i++) {
+            mygeometry = new mg_diskgeometry(i);
+            if (!mygeometry->mg_geometry_info_valid())
+                continue;
+            long long geometryinfo[6], partitioninfo[6], layoutinfo[6] ;
+            mygeometry->mg_geometryextractdata(geometryinfo, TRUE);
+            printf("geometry media type %lld, cyl %lld, rekcyl %lld, spt %lld bps %lld size %lld \n", 
+                geometryinfo[0], 
+                geometryinfo[1],
+                geometryinfo[2],
+                geometryinfo[3],
+                geometryinfo[4],
+                geometryinfo[5]
+                );
+            LPWSTR buf = mygeometry->mg_devicepath();
+            mg_partitioninfo  mgpartitioninfo(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+            mgpartitioninfo.mg_partitionextractdata(partitioninfo, TRUE);
+            printf("partitioninfo style  %lld, partn %lld, start %lld, len %lld, isservice %lld, isrewrt %lld, ...\n", 
+                partitioninfo[0],
+                partitioninfo[1],
+                partitioninfo[2],
+                partitioninfo[3],
+                partitioninfo[4],
+                partitioninfo[5] );
+            mg_disklayout mgdisklayout(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+            mgdisklayout.mg_layoutextractdata(layoutinfo, TRUE);
+            printf("layoutinfo style  %lld, count %lld, sigMstartG %lld, csumM/maxGoffs %lld, isservice %lld, isrewrt %lld, ...\n",
+                layoutinfo[0],
+                layoutinfo[1],
+                layoutinfo[2],
+                layoutinfo[3],
+                0,//layoutinfo[4],
+                0,//layoutinfo[5],
+                0//layoutinfo[6] 
+            ) ;
+        }
+        DWORD rslt = GetLogicalDrives();// (nBufferLength, (LPWSTR)logdrives);
+        int j = 0;
+        for (long i = 0x1; j < 26; i = i << 1, j++)
+        {
+            if (i & rslt)
+            {
+                printf("volume %lx, %c\n", i, ('A' + j));
+                mg_volumeitem* ptmpv = new mg_volumeitem('A'+j);
+                mg_partitioninfo* mypartitioninfo = new mg_partitioninfo('A'+j); // A (LPWSTR)L"\\\\.\\G:");
+                char volroot = 'A' + j;
+                if (!mypartitioninfo->mg_is_partition_info_valid())
+                {
+                    break;
+                }
+            }
+        }
+    }
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", 0);
+        return 0;
     }
 };

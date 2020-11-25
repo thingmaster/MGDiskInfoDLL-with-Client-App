@@ -40,38 +40,38 @@ int main()
     printf("args %s", args[1]);
     argv = args;
 
+    mg_systemdisks *mysystemdisks = new mg_systemdisks(0);
+    mysystemdisks->mg_printdisks();
     //mg_deviceioctl myioctl ( );
     //printf("%lx", myioctl.mg_printtest());
 
-    mg_diskgeometry mggeometry((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    mggeometry.mg_geometryextractdata();
-    mg_diskgeometry mggeometry1((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    mggeometry1.mg_geometryextractdata();
-
-    mg_disklayout mgdisklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    mgdisklayout.mg_layoutextractdata();
-    mg_disklayout mgdisklayout1((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    mgdisklayout1.mg_layoutextractdata();
-
     wchar_t buf[128];
+    // extract DiskExtent information by-Volume C: - Z:
+    for (char i = '0'; i <= '9'; i++)
+    {
+        swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\PhysicalDrive%c", i);
+        mg_diskgeometry mggeometry(buf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+        mggeometry.mg_geometryextractdata();
+        mg_disklayout mgdisklayout(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+        mgdisklayout.mg_layoutextractdata();
+        mg_partitioninfo  mgpartitioninfo(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+        mgpartitioninfo.mg_partitionextractdata();
+    }
+    //mg_disklayout mgdisklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    //mgdisklayout.mg_layoutextractdata();
+    //mg_disklayout mgdisklayout1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    //mgdisklayout1.mg_layoutextractdata();
+    //mg_partitioninfo  mgpartitioninfo((LPWSTR)L"\\\\.\\PhysicalDrive0");
+    //mgpartitioninfo.mg_partitionextractdata();
+    //mg_partitioninfo  mgpartitioninfo1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+    //mgpartitioninfo1.mg_partitionextractdata();
+
     // extract DiskExtent information by-Volume C: - Z:
     for (char i = 'C'; i <= 'Z'; i++)
     {
         swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\%c:", i);
         mg_diskextents    mgdiskextents(buf); //(LPWSTR)L"\\\\.\\\\C:");
         mgdiskextents.mg_extentsextractdata();
-    }
-
-    mg_partitioninfo  mgpartitioninfo((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    mgpartitioninfo.mg_partitionextractdata();
-
-    mg_partitioninfo  mgpartitioninfo1((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    mgpartitioninfo1.mg_partitionextractdata();
-
-    // extract Partition Information by-Volume C: - Z:
-    for (char i = 'C'; i <= 'Z'; i++)
-    {
-        swprintf(buf, sizeof(buf)/sizeof(*buf), L"\\\\.\\%c:", i);
         mg_partitioninfo  mgpartitioninfoF(buf); // (LPWSTR)L"\\\\.\\G:");
         mgpartitioninfoF.mg_partitionextractdata();
     }
