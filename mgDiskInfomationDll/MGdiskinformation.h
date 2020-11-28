@@ -225,10 +225,231 @@ public:
     }
 };
 
+BOOL partition_decode(PARTITION_INFORMATION_EX* p_pinfo, long long* layoutinfo, 
+    int partitiontype, int partitioncount=1)
+{
+    /*
+PARTITION_BASIC_DATA_GUID
+    ebd0a0a2 - b9e5 - 4433 - 87c0 - 68b6b72699c7
+    The data partition type that is created and recognized by Windows.
+    Only partitions of this type can be assigned drive letters, receive volume GUID paths, host mounted folders(also called volume mount points), and be enumerated by calls to FindFirstVolumeand FindNextVolume.
+
+    This value can be set only for basic disks, with one exception.If both PARTITION_BASIC_DATA_GUIDand GPT_ATTRIBUTE_PLATFORM_REQUIRED are set for a partition on a basic disk that is subsequently converted to a dynamic disk, the partition remains a basic partition, even though the rest of the disk is a dynamic disk.This is because the partition is considered to be an OEM partition on a GPT disk.
+
+    PARTITION_ENTRY_UNUSED_GUID
+    00000000 - 0000 - 0000 - 0000 - 000000000000
+    There is no partition.
+    This value can be set for basicand dynamic disks.
+
+    PARTITION_SYSTEM_GUID
+    c12a7328 - f81f - 11d2 - ba4b - 00a0c93ec93b
+    The partition is an EFI system partition.
+    This value can be set for basicand dynamic disks.
+
+    PARTITION_MSFT_RESERVED_GUID
+    e3c9e316 - 0b5c - 4db8 - 817d - f92df00215ae
+    The partition is a Microsoft reserved partition.
+    This value can be set for basicand dynamic disks.
+
+    PARTITION_LDM_METADATA_GUID
+    5808c8aa - 7e8f - 42e0 - 85d2 - e1e90434cfb3
+    The partition is a Logical Disk Manager(LDM) metadata partition on a dynamic disk.
+    This value can be set only for dynamic disks.
+
+    PARTITION_LDM_DATA_GUID
+    af9b60a0 - 1431 - 4f62 - bc68 - 3311714a69ad
+    The partition is an LDM data partition on a dynamic disk.
+    This value can be set only for dynamic disks.
+
+    PARTITION_MSFT_RECOVERY_GUID
+    de94bba4 - 06d1 - 4d40 - a16a - bfd50179d6ac
+    The partition is a Microsoft recovery partition.
+    This value can be set for basicand dynamic disks.
+    */
+    struct partitionguidlookup {
+        int guid_value;
+        const char* guid_name_str;
+        const char* guid_value_str;
+    } windows_definitions[7] = {
+        {0, (const char*)"PARTITION_BASIC_DATA_GUID", (const char*)"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"},
+        {1, (const char*)"PARTITION_ENTRY_UNUSED_GUID", (const char*)"00000000-0000-0000-0000-000000000000"},
+        {2, (const char*)"PARTITION_SYSTEM_GUID",(const char*)"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},
+        {3, (const char*)"PARTITION_MSFT_RESERVED_GUID", (const char*)"e3c9e316-0b5c-4db8-817d-f92df00215ae"},
+        {4, (const char*)"PARTITION_LDM_METADATA_GUID",(const char*)"5808c8aa-7e8f-42e0-85d2-e1e90434cfb3"},
+        {5, (const char*)"PARTITION_LDM_DATA_GUID",(const char*)"af9b60a0-1431-4f62-bc68-3311714a69ad"},
+        {6, (const char*)"PARTITION_MSFT_RECOVERY_GUID",(const char*)"de94bba4-06d1-4d40-a16a-bfd50179d6ac"} };
+
+    PARTITION_INFORMATION_MBR* p_pinfo_mbr;
+    PARTITION_INFORMATION_GPT* p_pinfo_gpt;
+
+    switch (partitiontype)
+    {
+    case PARTITION_STYLE_MBR: // = 0,
+        if (layoutinfo)
+        {
+            //layoutinfo[2] = pdli_mbr->Signature;
+            //layoutinfo[3] = pdli_mbr->CheckSum;
+        }
+        for (int i = 0; i < partitioncount; i++, p_pinfo++)
+        {
+            p_pinfo_mbr = &p_pinfo->Mbr;
+            p_pinfo_gpt = &p_pinfo->Gpt;
+            //------PARTITION_INFO_EX
+            //PARTITION_STYLE PartitionStyle;
+            //LARGE_INTEGER   StartingOffset;
+            //LARGE_INTEGER   PartitionLength;
+            //DWORD           PartitionNumber;
+            //BOOLEAN         RewritePartition;
+            //BOOLEAN         IsServicePartition;
+            //union {
+            //    PARTITION_INFORMATION_MBR Mbr;
+            //    PARTITION_INFORMATION_GPT Gpt;
+            //} DUMMYUNIONNAME;
+            wprintf(L"\nPart Style = %ld  [MBR %d, GPT %d, RAW %d]\n", (ULONG)p_pinfo->PartitionStyle,
+                PARTITION_STYLE::PARTITION_STYLE_MBR,
+                PARTITION_STYLE::PARTITION_STYLE_GPT,
+                PARTITION_STYLE::PARTITION_STYLE_RAW);
+
+            wprintf(L"Start offs   = %I64d\n", p_pinfo->StartingOffset);
+            wprintf(L"Part length  = %I64d\n", p_pinfo->PartitionLength);
+            wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
+            //typedef struct _PARTITION_INFORMATION_MBR {
+            //    BYTE    PartitionType;
+            //    BOOLEAN BootIndicator;
+            //    BOOLEAN RecognizedPartition;
+            //    DWORD   HiddenSectors;
+            //    GUID    PartitionId;
+            //} PARTITION_INFORMATION_MBR, * PPARTITION_INFORMATION_MBR
+            wprintf(L"P Type = %d\n", p_pinfo_mbr->PartitionType);
+            wprintf(L"Boot indicator   = %d\n", p_pinfo_mbr->BootIndicator);
+            wprintf(L"Recognized  = %d\n", p_pinfo_mbr->RecognizedPartition);
+            wprintf(L"Hidden sect  = %0lX\n", (ULONG)p_pinfo_mbr->HiddenSectors);
+            wprintf(L"GUID id  = %0lX\n", (GUID)p_pinfo_mbr->PartitionId);
+        }
+        break;
+    case PARTITION_STYLE_GPT: // = 1,
+        //------PARTITION_INFO_EX
+        //PARTITION_STYLE PartitionStyle;
+        //LARGE_INTEGER   StartingOffset;
+        //LARGE_INTEGER   PartitionLength;
+        //DWORD           PartitionNumber;
+        //BOOLEAN         RewritePartition;
+        //BOOLEAN         IsServicePartition;
+        //union {
+        //    PARTITION_INFORMATION_MBR Mbr;
+        //    PARTITION_INFORMATION_GPT Gpt;
+        //} DUMMYUNIONNAME;
+        for (int i = 0; i < partitioncount; i++, p_pinfo++)
+        {
+            p_pinfo_mbr = &p_pinfo->Mbr;
+            p_pinfo_gpt = &p_pinfo->Gpt;
+            //------PARTITION_INFO_EX
+            //PARTITION_STYLE PartitionStyle;
+            //LARGE_INTEGER   StartingOffset;
+            //LARGE_INTEGER   PartitionLength;
+            //DWORD           PartitionNumber;
+            //BOOLEAN         RewritePartition;
+            //BOOLEAN         IsServicePartition;
+            //union {
+            //    PARTITION_INFORMATION_MBR Mbr;
+            //    PARTITION_INFORMATION_GPT Gpt;
+            //} DUMMYUNIONNAME;
+            wprintf(L"\nPart Style = %ld [MBR %d, GPT %d, RAW %d]\n", (ULONG)p_pinfo->PartitionStyle,
+                PARTITION_STYLE::PARTITION_STYLE_MBR,
+                PARTITION_STYLE::PARTITION_STYLE_GPT,
+                PARTITION_STYLE::PARTITION_STYLE_RAW);
+            wprintf(L"Start offs   = %016I64XX (%I64d)\n", p_pinfo->StartingOffset, p_pinfo->StartingOffset);
+            wprintf(L"Part length  = %016I64XX (%I64d)\n", p_pinfo->PartitionLength, p_pinfo->PartitionLength);
+            wprintf(L"Part Number  = %ld\n", (ULONG)p_pinfo->PartitionNumber);
+            //typedef struct _PARTITION_INFORMATION_GPT {
+            //    GUID    PartitionType;
+            //    GUID    PartitionId;
+            //    DWORD64 Attributes;
+            //    WCHAR   Name[36];
+            //} PARTITION_INFORMATION_GPT, * PPARTITION_INFORMATION_GPT;
+            wprintf(L"GPT Partition Type GUID = %lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\n", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
+                p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+            char guidbuf[64];
+            sprintf_s(guidbuf, 64, "%lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
+                p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+            for (int guidtype = 0; guidtype < 7; guidtype++)
+            {
+                if (!strcmp(windows_definitions[guidtype].guid_value_str, guidbuf))
+                {
+                    /* it's a match */
+                    printf("GUIDTYPE=%s", windows_definitions[guidtype].guid_name_str);
+                }
+            }
+            wprintf(L"GPT Partition ID GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionId.Data1, p_pinfo_gpt->PartitionId.Data2, p_pinfo_gpt->PartitionId.Data3,
+                p_pinfo_gpt->PartitionId.Data4[0], p_pinfo_gpt->PartitionId.Data4[1], p_pinfo_gpt->PartitionId.Data4[2], p_pinfo_gpt->PartitionId.Data4[3],
+                p_pinfo_gpt->PartitionId.Data4[4], p_pinfo_gpt->PartitionId.Data4[5], p_pinfo_gpt->PartitionId.Data4[6], p_pinfo_gpt->PartitionId.Data4[7]);
+            wprintf(L"Attributes  =  %016I64X\n", p_pinfo_gpt->Attributes);
+            wprintf(L"Name = %ws\n", (ULONG)p_pinfo_gpt->Name);
+        }
+        break;
+
+    case PARTITION_STYLE_RAW: // = 2
+    default:
+        break;
+    }
+    return TRUE;
+}
 
 
 extern "C" MGSTORAGEDLL_API class mg_disklayout : mg_deviceioctl {
     int otherintval;
+    /*
+    PARTITION_BASIC_DATA_GUID
+        ebd0a0a2 - b9e5 - 4433 - 87c0 - 68b6b72699c7
+        The data partition type that is created and recognized by Windows.
+        Only partitions of this type can be assigned drive letters, receive volume GUID paths, host mounted folders(also called volume mount points), and be enumerated by calls to FindFirstVolumeand FindNextVolume.
+
+        This value can be set only for basic disks, with one exception.If both PARTITION_BASIC_DATA_GUIDand GPT_ATTRIBUTE_PLATFORM_REQUIRED are set for a partition on a basic disk that is subsequently converted to a dynamic disk, the partition remains a basic partition, even though the rest of the disk is a dynamic disk.This is because the partition is considered to be an OEM partition on a GPT disk.
+
+        PARTITION_ENTRY_UNUSED_GUID
+        00000000 - 0000 - 0000 - 0000 - 000000000000
+        There is no partition.
+        This value can be set for basicand dynamic disks.
+
+        PARTITION_SYSTEM_GUID
+        c12a7328 - f81f - 11d2 - ba4b - 00a0c93ec93b
+        The partition is an EFI system partition.
+        This value can be set for basicand dynamic disks.
+
+        PARTITION_MSFT_RESERVED_GUID
+        e3c9e316 - 0b5c - 4db8 - 817d - f92df00215ae
+        The partition is a Microsoft reserved partition.
+        This value can be set for basicand dynamic disks.
+
+        PARTITION_LDM_METADATA_GUID
+        5808c8aa - 7e8f - 42e0 - 85d2 - e1e90434cfb3
+        The partition is a Logical Disk Manager(LDM) metadata partition on a dynamic disk.
+        This value can be set only for dynamic disks.
+
+        PARTITION_LDM_DATA_GUID
+        af9b60a0 - 1431 - 4f62 - bc68 - 3311714a69ad
+        The partition is an LDM data partition on a dynamic disk.
+        This value can be set only for dynamic disks.
+
+        PARTITION_MSFT_RECOVERY_GUID
+        de94bba4 - 06d1 - 4d40 - a16a - bfd50179d6ac
+        The partition is a Microsoft recovery partition.
+        This value can be set for basicand dynamic disks.
+        */
+    struct partitionguidlookup {
+        int guid_value;
+        const char * guid_name_str;
+        const char * guid_value_str;
+    } windows_definitions[7] = {
+        {0, (const char* )"PARTITION_BASIC_DATA_GUID", (const char*)"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"},
+        {1, (const char*)"PARTITION_ENTRY_UNUSED_GUID", (const char*)"00000000-0000-0000-0000-000000000000"},
+        {2, (const char*)"PARTITION_SYSTEM_GUID",(const char*)"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},
+        {3, (const char*)"PARTITION_MSFT_RESERVED_GUID", (const char*)"e3c9e316-0b5c-4db8-817d-f92df00215ae"},
+        {4, (const char*)"PARTITION_LDM_METADATA_GUID",(const char*)"5808c8aa-7e8f-42e0-85d2-e1e90434cfb3"},
+        {5, (const char*)"PARTITION_LDM_DATA_GUID",(const char*)"af9b60a0-1431-4f62-bc68-3311714a69ad"},
+        {6, (const char*)"PARTITION_MSFT_RECOVERY_GUID",(const char*)"de94bba4-06d1-4d40-a16a-bfd50179d6ac"} };
 
 public:
     mg_disklayout(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_LAYOUT_EX)
@@ -284,6 +505,7 @@ public:
             PARTITION_STYLE::PARTITION_STYLE_GPT,
             PARTITION_STYLE::PARTITION_STYLE_RAW);
         wprintf(L"PartitionCount   = %ld\n", (ULONG)pdg->PartitionCount);
+        BOOL pinfoxx = partition_decode(p_pinfo, layoutinfo, pdg->PartitionStyle, pdg->PartitionCount);
         switch (pdg->PartitionStyle)
         {
         case PARTITION_STYLE_MBR: // = 0,
@@ -382,9 +604,21 @@ public:
                 //    DWORD64 Attributes;
                 //    WCHAR   Name[36];
                 //} PARTITION_INFORMATION_GPT, * PPARTITION_INFORMATION_GPT;
-                wprintf(L"GPT Partition Type GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                wprintf(L"GPT Partition Type GUID = %lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\n", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
                     p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
                     p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+                char guidbuf[64];
+                sprintf_s(guidbuf, 64, "%lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", p_pinfo_gpt->PartitionType.Data1, p_pinfo_gpt->PartitionType.Data2, p_pinfo_gpt->PartitionType.Data3,
+                    p_pinfo_gpt->PartitionType.Data4[0], p_pinfo_gpt->PartitionType.Data4[1], p_pinfo_gpt->PartitionType.Data4[2], p_pinfo_gpt->PartitionType.Data4[3],
+                    p_pinfo_gpt->PartitionType.Data4[4], p_pinfo_gpt->PartitionType.Data4[5], p_pinfo_gpt->PartitionType.Data4[6], p_pinfo_gpt->PartitionType.Data4[7]);
+                for (int guidtype = 0; guidtype < 7; guidtype++)
+                {
+                    if (!strcmp(this->windows_definitions[guidtype].guid_value_str, guidbuf))
+                    {
+                        /* it's a match */
+                        printf("GUIDTYPE=%s", this->windows_definitions[guidtype].guid_name_str);
+                    }
+                }
                 wprintf(L"GPT Partition ID GUID = %lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", p_pinfo_gpt->PartitionId.Data1, p_pinfo_gpt->PartitionId.Data2, p_pinfo_gpt->PartitionId.Data3,
                     p_pinfo_gpt->PartitionId.Data4[0], p_pinfo_gpt->PartitionId.Data4[1], p_pinfo_gpt->PartitionId.Data4[2], p_pinfo_gpt->PartitionId.Data4[3],
                     p_pinfo_gpt->PartitionId.Data4[4], p_pinfo_gpt->PartitionId.Data4[5], p_pinfo_gpt->PartitionId.Data4[6], p_pinfo_gpt->PartitionId.Data4[7]);
@@ -548,6 +782,8 @@ public:
             ppartdata6[4] = tmptr->IsServicePartition;
             ppartdata6[5] = tmptr->RewritePartition;
         }
+        BOOL pinfoxx = partition_decode(tmptr, ppartdata6, tmptr->PartitionStyle, 1);
+
         switch (tmptr->PartitionStyle)
         {
         case PARTITION_STYLE_MBR: // = 0,
