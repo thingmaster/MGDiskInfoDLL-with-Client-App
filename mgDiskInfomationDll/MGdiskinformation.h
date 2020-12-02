@@ -47,7 +47,7 @@ extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );
 //extern "C" MGSTORAGEDLL_API int diskgeometry(LPWSTR physicaldevpath);
 //extern "C" MGSTORAGEDLL_API int disklayout(LPWSTR physicaldevpath);
 
-
+//extern "C" MGSTORAGEDLL_API class mg_diskoperations;
 
 #define IOCTLBUFFERSZ 2048
 
@@ -197,7 +197,7 @@ public:
         //DWORD         BytesPerSector;
         //} DISK_GEOMETRY, * PDISK_GEOMETRY;
         wprintf(L"\n **IOCTL_DISK_GET_DRIVE_GEOMETRY** Drive path      = %ws\n", (LPWSTR)this->activedevicepath );
-        wprintf(L"\Media type: %d [Fixed %d, Removable %d, Unknown %d, others are Floppy media ]\n", tmptr->MediaType, MEDIA_TYPE::FixedMedia, MEDIA_TYPE::RemovableMedia, MEDIA_TYPE::Unknown);
+        wprintf(L"Media type: %d [Fixed %d, Removable %d, Unknown %d, others are Floppy media ]\n", tmptr->MediaType, MEDIA_TYPE::FixedMedia, MEDIA_TYPE::RemovableMedia, MEDIA_TYPE::Unknown);
         wprintf(L"Cylinders       = %I64d\n", tmptr->Cylinders);
         wprintf(L"Tracks/cylinder = %ld\n", (ULONG)tmptr->TracksPerCylinder);
         wprintf(L"Sectors/track   = %ld\n", (ULONG)tmptr->SectorsPerTrack);
