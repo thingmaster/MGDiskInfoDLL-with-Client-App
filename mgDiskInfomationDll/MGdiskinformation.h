@@ -8,6 +8,8 @@
 #define MGSTORAGEDLL_API __declspec(dllimport)
 #endif
 
+#include "MGdiskdlldefs.h"
+
 // The Fibonacci recurrence relation describes a sequence F
 // where F(n) is { n = 0, a
 //               { n = 1, b
@@ -1340,11 +1342,8 @@ public:
         DWORD   nFileSystemNameSize = MAX_PATH + 1;
         long long freespace;
         long long totalspace;
-        mg_diskgeometry* mygeometry;
-        for (int i = 0; i < 16; i++) {
-            mygeometry = new mg_diskgeometry(i);
-            if (!mygeometry->mg_geometry_info_valid())
-                continue;
+       
+
             long long geometryinfo[6], partitioninfo[6], layoutinfo[6] ;
             mygeometry->mg_geometryextractdata(geometryinfo, TRUE);
             printf("geometry media type %lld, cyl %lld, rekcyl %lld, spt %lld bps %lld size %lld \n", 
@@ -1400,3 +1399,14 @@ public:
         return 0;
     }
 };
+
+
+BOOL mggetdiskinfo(int diskn, P_MG_DISKINFO pinfo)
+{
+    wsprintf(pinfo->phypath, L"\\\\.\\%d", 0); // wchar_t phypath[MAX_PATH];
+    //char volumelist[128];
+    pinfo->mediasize = 999; // long long mediasize;
+    pinfo->isbootdisk = TRUE;// BOOL isbootdisk;
+    pinfo->npartitions = 1; // int npartitions;    pinfo
+    return TRUE;
+}

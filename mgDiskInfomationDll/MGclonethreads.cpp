@@ -13,14 +13,15 @@
 #include <tchar.h>
 #include <windows.h>
 #include <winioctl.h>
+//#include "MGdiskinformation.h"
 //#include <queue.h>
-
+#include "MGdiskdlldefs.h"
 
 
 #include "MGclonethreads.h"
 
 
-extern int MBR_diskcopy2(LONGLONG copysize); // targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, updatequeue = None, event = None, copysize = 0) :
+extern int MBR_diskcopy2(int, int, LONGLONG copysize); // targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, updatequeue = None, event = None, copysize = 0) :
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 {
@@ -58,7 +59,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 
     //return 0;
 
-    MBR_diskcopy2(1000000000000ull); // (targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, queue, event, sourcesize);
+    MBR_diskcopy2(0, 3, 0);// 1000000000000ull); // (targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, queue, event, sourcesize);
 
 }
 
@@ -103,7 +104,7 @@ int MBR_diskcopy(int source, int destination)
 {
 
     //srcinfo, destinfo, drvinfosrc, drvinfodest = self.MBR_copyinfo(source, destination)
-    MBR_diskcopy2(1000000);// srcinfo, destinfo, drvinfosrc, drvinfodest)
+    MBR_diskcopy2(0,3, 1000000);// srcinfo, destinfo, drvinfosrc, drvinfodest)
     return 0;
 }
 
@@ -112,12 +113,34 @@ extern "C" MGSTORAGEDLL_API HANDLE W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCV
 extern "C" MGSTORAGEDLL_API BOOL W32_lock_volume(HANDLE drivehandle);
 extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath);
 
-int MBR_diskcopy2(long long  copysize = 0) // targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, updatequeue = None, event = None, copysize = 0) :
+/*
+    * MBR_diskcopy2( srcdisk #, destdisk #)
+    * 
+    * copy src to destination. 
+    * 
+*/
+
+int MBR_diskcopy2( int src, int dst, long long  copysize = 0) // targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, updatequeue = None, event = None, copysize = 0) :
 {
     if (FALSE) // src bigger than dest?  srcinfo['bytestocopy'] > destinfo['bytestocopy'] 
     {
         printf("dest smaller than src disk");
         return -1;
+    }
+    // use ioctls to extract source and dest disk info
+    MG_DISKINFO srcdiskinfo, dstdiskinfo;
+    BOOL bgoodinfoS = FALSE;
+    BOOL bgoodinfoD = FALSE;
+    if (copysize == 0)
+    {
+
+        src = 0;
+        dst = 3;
+        bgoodinfoS = mggetdiskinfo(src,  &srcdiskinfo);
+        bgoodinfoD = mggetdiskinfo(dst, &dstdiskinfo);
+        //mg_systemdisks* mysystemdisks; 
+        //mysystemdisks = new mg_systemdisks(0);
+        //mysystemdisks->mg_printdisks();
     }
     //------queue updatequeue = new queue;
     unsigned long  COPYUNIT = (32768 * 8 * 16);// # CHANGE TO X16 = 4MB0

@@ -154,7 +154,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="Header.h" />
     <ClInclude Include="MGclonethreads.h" />
+    <ClInclude Include="MGdiskdlldefs.h" />
     <ClInclude Include="MGdiskinformation.h" />
     <ClInclude Include="mgjsonreader.h" />
     <ClInclude Include="pch.h" />
