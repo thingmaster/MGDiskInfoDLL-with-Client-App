@@ -18,12 +18,14 @@
 #include <winioctl.h>
 //#include <stdio.h>
 #include "MGdiskinformation.h"
+//#include "MGclonethreads.h"
 
 // DLL internal state variables:
 static unsigned long long previous_;  // Previous value, if any
 static unsigned long long current_;   // Current sequence value
 static unsigned index_;               // Current seq. position
 
+//extern int threadmainfunc();
 
 // Initialize a Fibonacci relation sequence
 // such that F(0) = a, F(1) = b.
@@ -35,6 +37,8 @@ void fibonacci_init(
     index_ = 0;
     current_ = a;
     previous_ = b; // see special case when initialized
+    // added this totally unrelated just as a harmless place to test threading
+    //int tmfreturn = threadmainfunc();
 }
 
 // Produce the next value in the sequence.
@@ -203,7 +207,7 @@ unsigned MGdiskpart(TCHAR * tmpfileptr)
     return 0;
 }
 
-
+//physpath format is  "\\\\.\\PhysicalDrive%d"%i
 HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, LONG offs)
 {
     if (fhnd==0)
@@ -218,7 +222,10 @@ HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, 
         if (fhnd <= 0)
         {
             return fhnd; //, -1, 0 # couldnot open it
+            DWORD lasterr = GetLastError();
+            printf("Read/Open error: %d\n", lasterr);
         }
+        //BOOL bLocked = W32_lock_volume(fhnd);
     }
 
     LONG movedisthigh = 0;
@@ -229,12 +236,14 @@ HANDLE W32_Read(HANDLE fhnd, LPCWSTR physpath, LPVOID rbytebuf, DWORD readsize, 
     readstat = ReadFile(fhnd, rbytebuf, readsize, &readcountresult, 0); //#, overlapped )
     if (!readstat)
     {
+        DWORD lasterr = GetLastError();
+        printf("Read error: %d\n", lasterr);
         return (HANDLE) 0;
     }
     return fhnd ; // fhnd, werr, rbytebuf
 }
 // W32_Write(fhnd, physpath, rbytebuf, readsize, offs) - execute the win32file Win32 API Write function, optionally open a handle
-BOOL  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs)
+HANDLE  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecount, int offs)
 {
     //if fhnd is Null, open the deviceand return handle
     //physpath is a fully constructed Win32 compliant \\physicaldevice0 path for writing
@@ -253,7 +262,9 @@ BOOL  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecou
             0);
         if (! fhnd)
         {
-            return FALSE ; //0, -1, 0 # couldnot open it
+            DWORD dlasterr = GetLastError();
+            printf("Write open failed %d\n", dlasterr);
+            return fhnd ; //0, -1, 0 # couldnot open it
         }
     }
 
@@ -262,9 +273,14 @@ BOOL  W32_Write(HANDLE fhnd, LPCWSTR physpath, LPCVOID wbytedata, DWORD writecou
     //werr, nbytes = win32file.WriteFile(fhnd, wbytedata)
     DWORD writecountresult;
     BOOL werr = WriteFile(fhnd, wbytedata, writecount, &writecountresult, 0 );
+    if (!werr)
+    {
+        DWORD dlasterr = GetLastError();
+        printf("Write data failed %d\n", dlasterr);
+    }
     //#win32file.CloseHandle(fhnd) #win32file.FlushFileBuffers(fhnd)
     //#fhnd = 0
-    return FALSE ;  //  fhnd, werr, nbytes
+    return fhnd ;  //  fhnd, werr, nbytes
 }
 
 

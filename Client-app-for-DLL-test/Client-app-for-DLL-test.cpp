@@ -18,6 +18,7 @@
 #include <windows.h>
 #include <tchar.h>
 #include "MGdiskinformation.h"
+#include "MGclonethreads.h"
 //#include <stdio.h>
 
 //#include "MGstorage.h"
@@ -39,43 +40,53 @@ int main()
     printf("args %s", args[0]);
     printf("args %s", args[1]);
     argv = args;
+    fibonacci_init( 0L, 1L);
 
+    class mgclonethread* mycloner;
+    mycloner = new  mgclonethread();
+
+    printf("SYSTEMDISKS CLASS -------------");
     mg_systemdisks *mysystemdisks = new mg_systemdisks(0);
     mysystemdisks->mg_printdisks();
     //mg_deviceioctl myioctl ( );
     //printf("%lx", myioctl.mg_printtest());
-
-    wchar_t buf[128];
-    // extract DiskExtent information by-Volume C: - Z:
-    for (char i = '0'; i <= '9'; i++)
+    if (FALSE)
     {
-        swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\PhysicalDrive%c", i);
-        mg_diskgeometry mggeometry(buf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
-        mggeometry.mg_geometryextractdata();
-        mg_disklayout mgdisklayout(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
-        mgdisklayout.mg_layoutextractdata();
-        mg_partitioninfo  mgpartitioninfo(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
-        mgpartitioninfo.mg_partitionextractdata();
-    }
-    //mg_disklayout mgdisklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    //mgdisklayout.mg_layoutextractdata();
-    //mg_disklayout mgdisklayout1((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    //mgdisklayout1.mg_layoutextractdata();
-    //mg_partitioninfo  mgpartitioninfo((LPWSTR)L"\\\\.\\PhysicalDrive0");
-    //mgpartitioninfo.mg_partitionextractdata();
-    //mg_partitioninfo  mgpartitioninfo1((LPWSTR)L"\\\\.\\PhysicalDrive1");
-    //mgpartitioninfo1.mg_partitionextractdata();
+        printf("Call IOCTL wrapper classes -------------");
+        wchar_t buf[128];
+        // extract DiskExtent information by-Volume C: - Z:
+        for (char i = '0'; i <= '9'; i++)
+        {
+            swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\PhysicalDrive%c", i);
+            mg_diskgeometry mggeometry(buf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+            mggeometry.mg_geometryextractdata();
+            mg_disklayout mgdisklayout(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+            mgdisklayout.mg_layoutextractdata();
+            mg_partitioninfo  mgpartitioninfo(buf);// (LPWSTR)L"\\\\.\\PhysicalDrive0");
+            mgpartitioninfo.mg_partitionextractdata();
+        }
+        //mg_disklayout mgdisklayout((LPWSTR)L"\\\\.\\PhysicalDrive0");
+        //mgdisklayout.mg_layoutextractdata();
+        //mg_disklayout mgdisklayout1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+        //mgdisklayout1.mg_layoutextractdata();
+        //mg_partitioninfo  mgpartitioninfo((LPWSTR)L"\\\\.\\PhysicalDrive0");
+        //mgpartitioninfo.mg_partitionextractdata();
+        //mg_partitioninfo  mgpartitioninfo1((LPWSTR)L"\\\\.\\PhysicalDrive1");
+        //mgpartitioninfo1.mg_partitionextractdata();
 
-    // extract DiskExtent information by-Volume C: - Z:
-    for (char i = 'C'; i <= 'Z'; i++)
-    {
-        swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\%c:", i);
-        mg_diskextents    mgdiskextents(buf); //(LPWSTR)L"\\\\.\\\\C:");
-        mgdiskextents.mg_extentsextractdata();
-        mg_partitioninfo  mgpartitioninfoF(buf); // (LPWSTR)L"\\\\.\\G:");
-        mgpartitioninfoF.mg_partitionextractdata();
+
+        // extract DiskExtent information by-Volume C: - Z:
+        for (char i = 'C'; i <= 'Z'; i++)
+        {
+            swprintf(buf, sizeof(buf) / sizeof(*buf), L"\\\\.\\%c:", i);
+            mg_diskextents    mgdiskextents(buf); //(LPWSTR)L"\\\\.\\\\C:");
+            mgdiskextents.mg_extentsextractdata();
+            mg_partitioninfo  mgpartitioninfoF(buf); // (LPWSTR)L"\\\\.\\G:");
+            mgpartitioninfoF.mg_partitionextractdata();
+        }
     }
 
+    printf("EXECUTE SOME READ IO & LOCK VOLUME  -------------");
     // read some chunks of D: at 1,000,000 offset increments
     BYTE rbytebuf[2048];
     HANDLE fhnd = W32_Read((HANDLE)0, (LPWSTR)L"\\\\.\\\\D:", rbytebuf, 2048, 0);
@@ -103,6 +114,8 @@ int main()
 
 
 #ifndef DOSMARTMG
+    printf("SMART MONITOR CLASS -------------");
+
     mg_diskoperations myinfo;
 
     myinfo.MGSMARTscan(0);
