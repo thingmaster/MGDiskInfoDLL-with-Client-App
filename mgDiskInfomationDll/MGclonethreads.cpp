@@ -120,6 +120,7 @@ extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath);
     * 
 */
 
+
 int MBR_diskcopy2( int src, int dst, long long  copysize = 0) // targetdisk, srcinfo, destinfo, drvinfosrc, drvinfodest, updatequeue = None, event = None, copysize = 0) :
 {
     if (FALSE) // src bigger than dest?  srcinfo['bytestocopy'] > destinfo['bytestocopy'] 
@@ -128,20 +129,23 @@ int MBR_diskcopy2( int src, int dst, long long  copysize = 0) // targetdisk, src
         return -1;
     }
     // use ioctls to extract source and dest disk info
-    MG_DISKINFO srcdiskinfo, dstdiskinfo;
+    mg_diskitem2 srcdiskinfo(0);
+    mg_diskitem2 dstdiskinfo(2);
+
+    P_MG_PARTITIONINFO p01 = &srcdiskinfo.mydiskinfo.diskpartitions[1]; 
     BOOL bgoodinfoS = FALSE;
     BOOL bgoodinfoD = FALSE;
     if (copysize == 0)
     {
+        long long srcsize = srcdiskinfo.mydiskinfo.disksize;
+        long long dstsize = dstdiskinfo.mydiskinfo.disksize;
 
-        src = 0;
-        dst = 3;
-        bgoodinfoS = mggetdiskinfo(src,  &srcdiskinfo);
-        bgoodinfoD = mggetdiskinfo(dst, &dstdiskinfo);
-        //mg_systemdisks* mysystemdisks; 
-        //mysystemdisks = new mg_systemdisks(0);
-        //mysystemdisks->mg_printdisks();
+        if (srcsize > dstsize)
+        {
+            return 0; // can copy to smaller physical device
+        }
     }
+    return 0; //FOR TESTING QUIT HERE no IO
     //------queue updatequeue = new queue;
     unsigned long  COPYUNIT = (32768 * 8 * 16);// # CHANGE TO X16 = 4MB0
     unsigned long long  writeops = copysize /(long long) COPYUNIT;

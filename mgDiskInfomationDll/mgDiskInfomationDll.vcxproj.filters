@@ -30,9 +30,6 @@
     <ClInclude Include="MGdiskinformation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Header.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="MGdiskdlldefs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
