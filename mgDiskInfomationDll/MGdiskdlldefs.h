@@ -26,7 +26,8 @@ typedef struct mgdiskinfo {
 	BOOL isbootdisk;
 	int npartitions;
 	// Geometry
-	BOOL geometryinfovalid;
+	int mediatype;
+	BOOL mgsupportedmedia;
 	long long cylinders;
 	long long trackspercyl;
 	long long sectorspertrack;
@@ -43,7 +44,7 @@ typedef struct mgdiskinfo {
 
 extern BOOL mggetdiskinfo(int diskn, P_MG_DISKINFO pinfo); 
 
-class mg_diskitem2 {
+class mg_diskitem {
 	BOOL validvolume = FALSE;
 	CHAR  RootPathName[1024];
 	DWORD SectorsPerCluster;
@@ -54,5 +55,5 @@ class mg_diskitem2 {
 public:
 	MG_DISKINFO mydiskinfo;
 	P_MG_PARTITIONINFO mypartitions;
-	mg_diskitem2(int disknumber);
+	mg_diskitem(int disknumber);
 };

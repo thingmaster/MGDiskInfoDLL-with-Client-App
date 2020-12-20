@@ -46,7 +46,7 @@ int main()
     mycloner = new  mgclonethread();
 
     printf("SYSTEMDISKS CLASS -------------");
-    mg_systemdisks *mysystemdisks = new mg_systemdisks(0);
+    mg_systemdisks *mysystemdisks = new mg_systemdisks(-1);
     mysystemdisks->mg_printdisks();
     //mg_deviceioctl myioctl ( );
     //printf("%lx", myioctl.mg_printtest());

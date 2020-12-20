@@ -129,8 +129,8 @@ int MBR_diskcopy2( int src, int dst, long long  copysize = 0) // targetdisk, src
         return -1;
     }
     // use ioctls to extract source and dest disk info
-    mg_diskitem2 srcdiskinfo(0);
-    mg_diskitem2 dstdiskinfo(2);
+    mg_diskitem srcdiskinfo(0);
+    mg_diskitem dstdiskinfo(2);
 
     P_MG_PARTITIONINFO p01 = &srcdiskinfo.mydiskinfo.diskpartitions[1]; 
     BOOL bgoodinfoS = FALSE;

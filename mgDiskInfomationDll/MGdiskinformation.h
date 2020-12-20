@@ -51,163 +51,7 @@ extern "C" MGSTORAGEDLL_API BOOL W32_dismount_volume(LPCWSTR volpath );
 
 //extern "C" MGSTORAGEDLL_API class mg_diskoperations;
 
-#define IOCTLBUFFERSZ 2048
-
-extern "C" MGSTORAGEDLL_API class mg_deviceioctl {
-    HANDLE activehandle;
-    DWORD activeioctl;
-    DWORD lastioerror;
-
-public:
-    BYTE  activeioctlbuffer[2048];
-    BOOL ioctl_status ;
-    //wchar_t* activedevicepath;  
-
-public:
-    mg_deviceioctl(DWORD newioctl=NULL)
-    {
-        //this->activedevicepath = new wchar_t(MAX_PATH); 
-        this->activeioctl = newioctl ;
-        this->ioctl_status = FALSE;
-    };
-
-    BOOL mg_openforioctl(LPWSTR wszpath)
-    {
-        HANDLE hDevice = CreateFileW(wszpath,          // drive to open
-            0,                // no access to the drive
-            FILE_SHARE_READ | // share mode
-            FILE_SHARE_WRITE,
-            NULL,             // default security attributes
-            OPEN_EXISTING,    // disposition
-            0,                // file attributes
-            NULL);            // do not copy file attributes
-
-        if (hDevice == INVALID_HANDLE_VALUE)    // cannot open the drive
-        {
-            this->activehandle = 0;
-            this->lastioerror = GetLastError();
-            return (FALSE);
-        }
-        this->activehandle = hDevice; 
-        //wsprintf(this->activedevicepath, L"%s", wszpath);
-        this->lastioerror = 0;
-        return TRUE;
-    }
-    BOOL mg_closeioctl()
-    {
-        return CloseHandle(this->activehandle);
-    }
-    BOOL mg_executeioctl(LPWSTR wszpath)
-    {
-        if (!this->activehandle)
-        {
-            if (!this->mg_openforioctl(wszpath) )
-            {
-                return FALSE; // unable to open path.
-            }
-        }
-        // now execute on the active handle
-        DWORD retbytecount = 0;
-        this->ioctl_status = DeviceIoControl(this->activehandle, // target device 
-            this->activeioctl, // operation to perform
-            NULL, 0,                       // no input buffer
-            this->activeioctlbuffer, IOCTLBUFFERSZ,      // output buffer
-            &retbytecount,                 // # bytes returned
-            (LPOVERLAPPED)NULL);           // synchronous I/O
-        if (!this->ioctl_status)
-        {
-            this->lastioerror = GetLastError();
-        }
-        this->mg_closeioctl();
-        return this->ioctl_status;
-    }
-    DWORD mg_printtest(void)
-    {
-        printf("test");
-        return this->activeioctl;
-    }
-    int getactiveioctl()
-    {
-        return this->activeioctl;
-    }
-};
-
-
-extern "C" MGSTORAGEDLL_API class mg_diskgeometry : mg_deviceioctl {
-    int otherintval;
-    wchar_t pathbuf[128];
-
-public:
-    mg_diskgeometry(int devicenumber) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
-    {
-        swprintf(this->pathbuf, sizeof(this->pathbuf) / sizeof(*this->pathbuf), L"\\\\.\\PhysicalDrive%d", devicenumber);
-        this->mg_executeioctl(this->pathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
-    }
-    mg_diskgeometry(LPWSTR wszpath=NULL, int othervar=0 ) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
-    {
-        this->mg_executeioctl(wszpath);
-        //COPY THE wszpath to pathbuf
-    };
-    BOOL mg_geometry_info_valid()
-    {
-        return this->ioctl_status;
-    }
-    LPWSTR mg_devicepath()
-    {
-        if (this->mg_geometry_info_valid())
-            return (LPWSTR) &this->pathbuf;
-        return NULL;
-    }
-    DWORD mg_printdisks(void)
-    {
-        printf("\ndisks %d\n", this->getactiveioctl());
-        return this->getactiveioctl();
-    }
-
-    BOOL mg_geometryextractdata(P_MG_DISKINFO returninfo=NULL, BOOL outputflag = FALSE)
-    {
-        if (!this->ioctl_status)
-        {
-            return FALSE;
-        }
-        DISK_GEOMETRY* tmptr = (DISK_GEOMETRY*)&this->activeioctlbuffer;
-        if (!tmptr)
-        {
-            return FALSE;
-        }
-        //LARGE_INTEGER Cylinders;
-        //MEDIA_TYPE    MediaType; https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ne-winioctl-media_type
-        //DWORD         TracksPerCylinder;
-        //DWORD         SectorsPerTrack;
-        //DWORD         BytesPerSector;
-        //} DISK_GEOMETRY, * PDISK_GEOMETRY;
-        if (returninfo)
-        {
-            returninfo->cylinders = tmptr->Cylinders.QuadPart;
-            returninfo->trackspercyl = tmptr->TracksPerCylinder;
-            returninfo->sectorspertrack = (ULONG)tmptr->SectorsPerTrack;
-            returninfo->bytespersector = tmptr->BytesPerSector;
-            returninfo->disksize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
-                (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
-            returninfo->disksizegb = returninfo->disksize / (1024 * 1024 * 1024);
-        }
-        if (!outputflag)
-            return TRUE;
-        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_GEOMETRY** Drive path      = %ws\n", (LPWSTR)this->pathbuf);
-        wprintf(L"Media type: %d [Fixed %d, Removable %d, Unknown %d, others are Floppy media ]\n", tmptr->MediaType, MEDIA_TYPE::FixedMedia, MEDIA_TYPE::RemovableMedia, MEDIA_TYPE::Unknown);
-        wprintf(L"Cylinders       = %I64d\n", tmptr->Cylinders);
-        wprintf(L"Tracks/cylinder = %ld\n", (ULONG)tmptr->TracksPerCylinder);
-        wprintf(L"Sectors/track   = %ld\n", (ULONG)tmptr->SectorsPerTrack);
-        wprintf(L"Bytes/sector    = %ld\n", (ULONG)tmptr->BytesPerSector);
-        ULONGLONG DiskSize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
-            (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
-        wprintf(L"Disk size       = %I64d (Bytes)\n"
-            L"                = %.2f (Gb)\n",
-            DiskSize, (double)DiskSize / (1024 * 1024 * 1024));
-        return TRUE;
-    }
-};
-
+// partition_decode is a service function to decode ioctl output partition structure 
 BOOL partition_decode(PARTITION_INFORMATION_EX* p_pinfo, P_MG_DISKINFO returninfo, 
     int partitiontype, int partitioncount=1)
 {
@@ -401,71 +245,200 @@ PARTITION_BASIC_DATA_GUID
 }
 
 
+
+#define IOCTLBUFFERSZ 2048
+
+// class mg_deviceioctl - wrapper for generic Windows IOCTL service request.
+// caller must: 
+// instantiate this. provide IOCTL code for the operation
+// call open method here. open the target physical disk device or volume
+//  -  ioctl_status is set TRUE (open succeeded)  or FALSE (failed) 
+// call execute method here. executes the actual ioctl request. 
+//     - activeioctlbuffer is filled with response data
+//     = ioctl_status is set TRUE (it worked)  or FALSE (failed)
+// 
+// WARNING any new requests not already supported here should be carefully reviewed for
+// detailed inputs and outputs data type and size!
+//
+extern "C" MGSTORAGEDLL_API class mg_deviceioctl {
+    HANDLE activehandle;
+    DWORD activeioctl;
+    DWORD lastioerror;
+
+public:
+    BYTE  activeioctlbuffer[2048];
+    BOOL ioctl_status;
+    //wchar_t* activedevicepath;  
+
+public:
+    mg_deviceioctl(DWORD newioctl = NULL)
+    {
+        this->activeioctl = newioctl;
+        this->ioctl_status = FALSE;
+    };
+
+    BOOL mg_openforioctl(LPWSTR wszpath)
+    {
+        HANDLE hDevice = CreateFileW(wszpath,          // drive to open
+            0,                // no access to the drive
+            FILE_SHARE_READ | // share mode
+            FILE_SHARE_WRITE,
+            NULL,             // default security attributes
+            OPEN_EXISTING,    // disposition
+            0,                // file attributes
+            NULL);            // do not copy file attributes
+
+        if (hDevice == INVALID_HANDLE_VALUE)    // cannot open the drive
+        {
+            this->activehandle = 0;
+            this->lastioerror = GetLastError();
+            return (FALSE);
+        }
+        this->activehandle = hDevice;
+        //wsprintf(this->activedevicepath, L"%s", wszpath);
+        this->lastioerror = 0;
+        return TRUE;
+    }
+    BOOL mg_closeioctl()
+    {
+        return CloseHandle(this->activehandle);
+    }
+    BOOL mg_executeioctl(LPWSTR wszpath)
+    {
+        if (!this->activehandle)
+        {
+            if (!this->mg_openforioctl(wszpath))
+            {
+                return FALSE; // unable to open path.
+            }
+        }
+        // now execute on the active handle
+        DWORD retbytecount = 0;
+        this->ioctl_status = DeviceIoControl(this->activehandle, // target device 
+            this->activeioctl, // operation to perform
+            NULL, 0,                       // no input buffer
+            this->activeioctlbuffer, IOCTLBUFFERSZ,      // output buffer
+            &retbytecount,                 // # bytes returned
+            (LPOVERLAPPED)NULL);           // synchronous I/O
+        if (!this->ioctl_status)
+        {
+            this->lastioerror = GetLastError();
+        }
+        this->mg_closeioctl();
+        return this->ioctl_status;
+    }
+    DWORD mg_printtest(void)
+    {
+        printf("test");
+        return this->activeioctl;
+    }
+    int getactiveioctl()
+    {
+        return this->activeioctl;
+    }
+};
+
+
+// Execute the IOCTL_DISK_GET_DRIVE_GEOMETRY ioctl
+extern "C" MGSTORAGEDLL_API class mg_diskgeometry : mg_deviceioctl {
+    int otherintval;
+    LPWSTR ppathbuf;
+    wchar_t pathbuf[128];
+
+public:
+    mg_diskgeometry(int devicenumber) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
+    {
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)]();
+        swprintf(this->ppathbuf, 128*sizeof(wchar_t), L"\\\\.\\PhysicalDrive%d\0", devicenumber);
+        this->ioctl_status = this->mg_executeioctl(this->ppathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+    }
+    mg_diskgeometry(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_GEOMETRY)
+    {
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)]();
+        swprintf(this->ppathbuf, 128 * sizeof(wchar_t), L"%ws", wszpath);
+        this->ioctl_status = this->mg_executeioctl(wszpath);
+        //COPY THE wszpath to pathbuf
+    };
+    BOOL mg_geometry_info_valid()
+    {
+        return this->ioctl_status;
+    }
+    LPWSTR mg_devicepath()
+    {
+        if (this->mg_geometry_info_valid())
+            return (LPWSTR)&this->ppathbuf;
+        return NULL;
+    }
+    DWORD mg_printdisks(void)
+    {
+        printf("\ndisks %d\n", this->getactiveioctl());
+        return this->getactiveioctl();
+    }
+
+    BOOL mg_geometryextractdata(P_MG_DISKINFO returninfo = NULL, BOOL outputflag = FALSE)
+    {
+        if (!this->ioctl_status)
+        {
+            return FALSE;
+        }
+        DISK_GEOMETRY* tmptr = (DISK_GEOMETRY*)&this->activeioctlbuffer;
+        if (!tmptr)
+        {
+            return FALSE;
+        }
+        //LARGE_INTEGER Cylinders;
+        //MEDIA_TYPE    MediaType; https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ne-winioctl-media_type
+        //DWORD         TracksPerCylinder;
+        //DWORD         SectorsPerTrack;
+        //DWORD         BytesPerSector;
+        //} DISK_GEOMETRY, * PDISK_GEOMETRY;
+        if (returninfo)
+        {
+            returninfo->cylinders = tmptr->Cylinders.QuadPart;
+            returninfo->mediatype = tmptr->MediaType;
+            returninfo->mgsupportedmedia = (tmptr->MediaType == MEDIA_TYPE::FixedMedia) || (tmptr->MediaType == MEDIA_TYPE::FixedMedia);
+            returninfo->trackspercyl = tmptr->TracksPerCylinder;
+            returninfo->sectorspertrack = (ULONG)tmptr->SectorsPerTrack;
+            returninfo->bytespersector = tmptr->BytesPerSector;
+            returninfo->disksize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
+                (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
+            returninfo->disksizegb = returninfo->disksize / (1024 * 1024 * 1024);
+        }
+        if (!outputflag)
+            return TRUE;
+        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_GEOMETRY** Drive path      = %ws\n", (LPWSTR)this->ppathbuf);
+        wprintf(L"Media type: %d [Fixed %d, Removable %d, Unknown %d, others are Floppy media ]\n", tmptr->MediaType, MEDIA_TYPE::FixedMedia, MEDIA_TYPE::RemovableMedia, MEDIA_TYPE::Unknown);
+        wprintf(L"Cylinders       = %I64d\n", tmptr->Cylinders);
+        wprintf(L"Tracks/cylinder = %ld\n", (ULONG)tmptr->TracksPerCylinder);
+        wprintf(L"Sectors/track   = %ld\n", (ULONG)tmptr->SectorsPerTrack);
+        wprintf(L"Bytes/sector    = %ld\n", (ULONG)tmptr->BytesPerSector);
+        ULONGLONG DiskSize = tmptr->Cylinders.QuadPart * (ULONG)tmptr->TracksPerCylinder *
+            (ULONG)tmptr->SectorsPerTrack * (ULONG)tmptr->BytesPerSector;
+        wprintf(L"Disk size       = %I64d (Bytes)\n"
+            L"                = %.2f (Gb)\n",
+            DiskSize, (double)DiskSize / (1024 * 1024 * 1024));
+        return TRUE;
+    }
+};
+
+// Execute the IOCTL_DISK_GET_DRIVE_LAYOUT_EX ioctl
 extern "C" MGSTORAGEDLL_API class mg_disklayout : mg_deviceioctl {
     int otherintval;
-    wchar_t pathbuf [MAX_PATH];
-
-
-    /*
-    PARTITION_BASIC_DATA_GUID
-        ebd0a0a2 - b9e5 - 4433 - 87c0 - 68b6b72699c7
-        The data partition type that is created and recognized by Windows.
-        Only partitions of this type can be assigned drive letters, receive volume GUID paths, host mounted folders(also called volume mount points), and be enumerated by calls to FindFirstVolumeand FindNextVolume.
-
-        This value can be set only for basic disks, with one exception.If both PARTITION_BASIC_DATA_GUIDand GPT_ATTRIBUTE_PLATFORM_REQUIRED are set for a partition on a basic disk that is subsequently converted to a dynamic disk, the partition remains a basic partition, even though the rest of the disk is a dynamic disk.This is because the partition is considered to be an OEM partition on a GPT disk.
-
-        PARTITION_ENTRY_UNUSED_GUID
-        00000000 - 0000 - 0000 - 0000 - 000000000000
-        There is no partition.
-        This value can be set for basicand dynamic disks.
-
-        PARTITION_SYSTEM_GUID
-        c12a7328 - f81f - 11d2 - ba4b - 00a0c93ec93b
-        The partition is an EFI system partition.
-        This value can be set for basicand dynamic disks.
-
-        PARTITION_MSFT_RESERVED_GUID
-        e3c9e316 - 0b5c - 4db8 - 817d - f92df00215ae
-        The partition is a Microsoft reserved partition.
-        This value can be set for basicand dynamic disks.
-
-        PARTITION_LDM_METADATA_GUID
-        5808c8aa - 7e8f - 42e0 - 85d2 - e1e90434cfb3
-        The partition is a Logical Disk Manager(LDM) metadata partition on a dynamic disk.
-        This value can be set only for dynamic disks.
-
-        PARTITION_LDM_DATA_GUID
-        af9b60a0 - 1431 - 4f62 - bc68 - 3311714a69ad
-        The partition is an LDM data partition on a dynamic disk.
-        This value can be set only for dynamic disks.
-
-        PARTITION_MSFT_RECOVERY_GUID
-        de94bba4 - 06d1 - 4d40 - a16a - bfd50179d6ac
-        The partition is a Microsoft recovery partition.
-        This value can be set for basicand dynamic disks.
-        */
-    struct partitionguidlookup {
-        int guid_value;
-        const char * guid_name_str;
-        const char * guid_value_str;
-    } windows_definitions[7] = {
-        {0, (const char* )"PARTITION_BASIC_DATA_GUID", (const char*)"ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"},
-        {1, (const char*)"PARTITION_ENTRY_UNUSED_GUID", (const char*)"00000000-0000-0000-0000-000000000000"},
-        {2, (const char*)"PARTITION_SYSTEM_GUID",(const char*)"c12a7328-f81f-11d2-ba4b-00a0c93ec93b"},
-        {3, (const char*)"PARTITION_MSFT_RESERVED_GUID", (const char*)"e3c9e316-0b5c-4db8-817d-f92df00215ae"},
-        {4, (const char*)"PARTITION_LDM_METADATA_GUID",(const char*)"5808c8aa-7e8f-42e0-85d2-e1e90434cfb3"},
-        {5, (const char*)"PARTITION_LDM_DATA_GUID",(const char*)"af9b60a0-1431-4f62-bc68-3311714a69ad"},
-        {6, (const char*)"PARTITION_MSFT_RECOVERY_GUID",(const char*)"de94bba4-06d1-4d40-a16a-bfd50179d6ac"} };
+    LPWSTR ppathbuf;
+    wchar_t pathbuf[128];
 
 public:
     mg_disklayout(int devicenumber) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_LAYOUT_EX)
     {
-        swprintf(this->pathbuf, sizeof(this->pathbuf) / sizeof(*this->pathbuf), L"\\\\.\\PhysicalDrive%d", devicenumber);
-        this->mg_executeioctl(this->pathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)];
+        swprintf(this->ppathbuf, 128 * sizeof(wchar_t), L"\\\\.\\PhysicalDrive%d", devicenumber);
+        this->ioctl_status = this->mg_executeioctl(this->ppathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
     }
 
     mg_disklayout(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_DRIVE_LAYOUT_EX)
     {
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)]();
+        swprintf(this->ppathbuf, 128 * sizeof(wchar_t), L"%ws", wszpath);
         this->mg_executeioctl(wszpath);
     }
     DWORD mg_printdisks(void)
@@ -511,7 +484,7 @@ public:
             returninfo->diskpartitionstyle = tmptr->PartitionStyle;
             returninfo->diskpartitioncount = tmptr->PartitionCount;
         }
-        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_LAYOUT_EX** Drive path      = %ws\n", (LPWSTR)this->pathbuf);
+        wprintf(L"\n **IOCTL_DISK_GET_DRIVE_LAYOUT_EX** Drive path      = %ws\n", (LPWSTR)this->ppathbuf);
         wprintf(L"PartitionStyle = %ld [MBR %d, GPT %d, RAW %d]\n", (ULONG)pdg->PartitionStyle,
             PARTITION_STYLE::PARTITION_STYLE_MBR,
             PARTITION_STYLE::PARTITION_STYLE_GPT,
@@ -525,17 +498,21 @@ public:
 
 extern "C" MGSTORAGEDLL_API class mg_diskextents : mg_deviceioctl {
     int otherintval;
+    LPWSTR ppathbuf;
     wchar_t  pathbuf[MAX_PATH];
 public:
     mg_diskextents(int devicenumber) : mg_deviceioctl(IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS)
     {
-        swprintf(this->pathbuf, sizeof(this->pathbuf) / sizeof(*this->pathbuf), L"\\\\.\\PhysicalDrive%d", devicenumber);
-        this->mg_executeioctl(this->pathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)];
+        swprintf(this->ppathbuf, 128 * sizeof(wchar_t), L"\\\\.\\PhysicalDrive%d", devicenumber);
+        this->ioctl_status = this->mg_executeioctl(this->ppathbuf);  // (LPWSTR)L"\\\\.\\PhysicalDrive1");
     }
 
     mg_diskextents(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS)
     {
-        this->mg_executeioctl(wszpath);
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)]();
+        swprintf(this->ppathbuf, 128 * sizeof(wchar_t), L"%ws", wszpath);
+        this->ioctl_status = this->mg_executeioctl(wszpath);
     }
     DWORD mg_printdisks(void)
     {
@@ -577,7 +554,7 @@ public:
             pextents4[3] = pextents4[3] << 32;
             pextents4[3] += p_pinfo->ExtentLength.LowPart;
         }
-        wprintf(L"\n **IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS** Drive path      = %ws\n", (LPWSTR)this->pathbuf);
+        wprintf(L"\n **IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS** Drive path      = %ws\n", this->ppathbuf);
         wprintf(L"N Extents = %ld\n", (ULONG)tmptr->NumberOfDiskExtents);
         for (int i = 0; i < tmptr->NumberOfDiskExtents; i++, p_pinfo++)
         {
@@ -591,22 +568,20 @@ public:
 
 extern "C" MGSTORAGEDLL_API class mg_partitioninfo : mg_deviceioctl {
     int otherintval;
+    LPWSTR ppathbuf;
     wchar_t volumepathbuf[128];
     BOOL mg_partition_info_valid;
 public:
     mg_partitioninfo(char driveletter, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
     {
-        swprintf(this->volumepathbuf, sizeof(this->volumepathbuf) / sizeof(*this->volumepathbuf), L"\\\\.\\%c:", driveletter);
-        this->mg_partition_info_valid = this->mg_executeioctl(this->volumepathbuf);
-    }
-    mg_partitioninfo(int devicenumber, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
-    {
-        swprintf(this->volumepathbuf, sizeof(this->volumepathbuf) / sizeof(*this->volumepathbuf), L"\\\\.\\PhysicalDrive%d", devicenumber);
-        this->mg_partition_info_valid = this->mg_executeioctl(this->volumepathbuf);
+        this->ppathbuf = (LPWSTR) new BYTE[129 * sizeof(wchar_t)];
+        swprintf(this->ppathbuf, 128*sizeof(wchar_t), L"\\\\.\\%c:", driveletter);
+        this->mg_partition_info_valid = this->mg_executeioctl(this->ppathbuf);
     }
 
     mg_partitioninfo(LPWSTR wszpath = NULL, int othervar = 0) : mg_deviceioctl(IOCTL_DISK_GET_PARTITION_INFO_EX)
     {
+        this->ppathbuf = NULL;
         this->mg_partition_info_valid = this->mg_executeioctl(wszpath);
     }
 
@@ -621,7 +596,7 @@ public:
         {
             return NULL;
         }
-        return (LPWSTR)&this->volumepathbuf;
+        return this->ppathbuf;
     }
     DWORD mg_printdisks(void)
     {
@@ -655,7 +630,7 @@ public:
             //wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s. Partition length ZERO.\n", (LPWSTR)this->activedevicepath);
             return FALSE;
         }
-        wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s, Partition style: %d\n", (LPWSTR)this->volumepathbuf, tmptr->PartitionStyle);
+        wprintf(L"\n**IOCTL_DISK_GET_PARTITION_INFO_EX** Device %s, Partition style: %d\n", (LPWSTR)this->ppathbuf, tmptr->PartitionStyle);
         wprintf(L"Start offs   = %016I64XX (%I64d)\n", tmptr->StartingOffset, tmptr->StartingOffset);
         wprintf(L"Part length  = %016I64XX (%I64d)\n", tmptr->PartitionLength, tmptr->PartitionLength);
         wprintf(L"Part Number  = %ld\n", (ULONG)tmptr->PartitionNumber);
@@ -1131,6 +1106,8 @@ class mg_volumeitem {
     DWORD NumberOfFreeClusters;
     DWORD TotalNumberOfClusters;
     long long extentsinfo[6];
+    MG_DISKINFO diskinfo;
+    P_MG_PARTITIONINFO partitioninfo;
 
 public:
     mg_volumeitem(char volroot) {
@@ -1140,11 +1117,10 @@ public:
         {
             return;
         }
-        MG_DISKINFO diskinfo;
-        P_MG_PARTITIONINFO partitioninfo = (P_MG_PARTITIONINFO) new BYTE[MAXPARTITIONCOUNT * sizeof(MG_PARTITIONINFO)];
+        this->partitioninfo = (P_MG_PARTITIONINFO) new BYTE[MAXPARTITIONCOUNT * sizeof(MG_PARTITIONINFO)];
 
-        diskinfo.diskpartitions = partitioninfo;
-        mypartitioninfo->mg_partitionextractdata(&diskinfo);
+        this->diskinfo.diskpartitions = this->partitioninfo;
+        mypartitioninfo->mg_partitionextractdata(&this->diskinfo);
         P_MG_PARTITIONINFO p0 = partitioninfo;
         P_MG_PARTITIONINFO p1 = &partitioninfo[1];
         P_MG_PARTITIONINFO p2 = &partitioninfo[2];
@@ -1217,83 +1193,70 @@ public:
     }
 };
 
-class mg_diskitem {
-    BOOL validvolume = FALSE;
-    CHAR  RootPathName[1024];
-    DWORD SectorsPerCluster;
-    DWORD BytesPerSector;
-    DWORD NumberOfFreeClusters;
-    DWORD TotalNumberOfClusters;
-    P_MG_PARTITIONINFO mypartitions;
 
-public:
-    mg_diskitem(int disknumber, P_MG_DISKINFO returninfo) {
-        mg_diskgeometry* mygeometry = new mg_diskgeometry(disknumber);
-        mygeometry->mg_geometryextractdata(returninfo, TRUE);
-
-        this->mypartitions = (P_MG_PARTITIONINFO) new BYTE[MAXPARTITIONCOUNT*sizeof(MG_PARTITIONINFO)];
-        returninfo->diskpartitions = this->mypartitions;
-
-        mg_disklayout *mydisklayoutinfo  = new mg_disklayout(disknumber);
-        mydisklayoutinfo->mg_layoutextractdata(returninfo, TRUE);
-    }
-};
-
-mg_diskitem2::mg_diskitem2(int disknumber) {
+mg_diskitem::mg_diskitem(int disknumber) {
+    this->mydiskinfo.mgsupportedmedia = FALSE; // just to initialize it
+    this->mydiskinfo.diskpartitioncount = 0;
     mg_diskgeometry* mygeometry = new mg_diskgeometry(disknumber);
     mygeometry->mg_geometryextractdata(&this->mydiskinfo, TRUE);
-
+    if (!this->mydiskinfo.mgsupportedmedia)
+    {
+        return;
+    }
     this->mypartitions = (P_MG_PARTITIONINFO) new BYTE[MAXPARTITIONCOUNT * sizeof(MG_PARTITIONINFO)];
     this->mydiskinfo.diskpartitions  = this->mypartitions;
 
-    // this appears to give the whole disk partition table type/ disk size with partition #0
+    // retrieve whole disk partitioning scheme MBR or GPT data as partition #0
     mg_partitioninfo* mydiskpartitioninfo = new mg_partitioninfo(disknumber);
     mydiskpartitioninfo->mg_partitionextractdata(&this->mydiskinfo);
 
-    P_MG_PARTITIONINFO p0 = &this->mydiskinfo.diskpartitions[0];
-    P_MG_PARTITIONINFO p1 = &this->mydiskinfo.diskpartitions[1];
-    P_MG_PARTITIONINFO p2 = &this->mydiskinfo.diskpartitions[2];
-    P_MG_PARTITIONINFO p3 = &this->mydiskinfo.diskpartitions[3];
-    P_MG_PARTITIONINFO p4 = &this->mydiskinfo.diskpartitions[4];
-
-    // this appears to give the partition table entries partition #1...N
+    // retrieve the partition table entries partition #1...N
     mg_disklayout* mydisklayoutinfo = new mg_disklayout(disknumber);
     mydisklayoutinfo->mg_layoutextractdata(&this->mydiskinfo, TRUE);
 }
 
 extern "C" MGSTORAGEDLL_API class mg_systemdisks {
-    //mg_diskitem* physicaldevices[32] ;
-#define MAXDEVICES 16
+    /* 
+    * from answers.microsoft.com: 
+    * Each hard drive requires one drive letter per partition, and there are 24 drive letters (C-Z) available.  
+    * So, in theory, you can have up to 24 hard drives, if each one has only one partition.
+    * (my comment: in filesystem context it's true, but a drive is r/w as a physical device without a mounted filesystem volume
+    *  so I'll use 24 but I don't consider that a technically complete answer)
+    */
+    #define MAXDEVICES 24
     mg_volumeitem* logicalvolumes[26] ;
-    MG_DISKINFO diskinfo[MAXDEVICES];
+    P_MG_DISKINFO pdiskinfo[MAXDEVICES];
+    unsigned int systemdiskbitflags;
 
 
 public:
-    mg_systemdisks(int i)
+    mg_systemdisks(int i=-1)
     {
         LPWSTR buf;
+        int j;
         CHAR  RootPathName[1024];
-        // Free Space Request data
-        DWORD SectorsPerCluster;
-        DWORD BytesPerSector;
-        DWORD NumberOfFreeClusters;
-        DWORD TotalNumberOfClusters;
-        // Volume Info Request
-        char VolumeNameBuffer[MAX_PATH + 1];
-        DWORD   nVolumeNameSize = MAX_PATH + 1;
-        DWORD VolumeSerialNumber;
-        DWORD MaximumComponentLength;
-        DWORD FileSystemFlags;
-        char    lpFileSystemNameBuffer[MAX_PATH + 1];
-        DWORD   nFileSystemNameSize = MAX_PATH + 1;
-        long long freespace;
-        long long totalspace;
+        this->systemdiskbitflags = 0;
+        if (i == -1)
+        {
+            unsigned int maskbitvar=1;
+            for (j = 0; j < MAXDEVICES; j++, maskbitvar <<=1)
+            {
+                pdiskinfo[j] = NULL;
+                class mg_diskitem *ptmp = new mg_diskitem(j);
+                if (ptmp->mydiskinfo.disksize)
+                {
+                    pdiskinfo[j] = (P_MG_DISKINFO) new BYTE[sizeof(MG_DISKINFO)];
+                    memcpy((void*)pdiskinfo[j], (void*)&ptmp->mydiskinfo, sizeof(MG_DISKINFO));
+                    this->systemdiskbitflags |= maskbitvar;
+                }
+            }
+        }
         if (TRUE)
         {
            //diskitems
         }
         DWORD rslt = GetLogicalDrives();// (nBufferLength, (LPWSTR)logdrives);
-        int j = 0;
+        j = 0;
         for (long i = 0x1; j < 26; i = i << 1, j++)
         {
             if (i & rslt)
@@ -1304,7 +1267,7 @@ public:
                 char volroot = 'A' + j;
                 if (!mypartitioninfo->mg_is_partition_info_valid())
                 {
-                    break;
+                    //break;
                 }
             }
         }
